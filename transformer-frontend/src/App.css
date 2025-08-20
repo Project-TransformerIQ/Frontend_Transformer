@@ -1,0 +1,64 @@
+/* Global styles */
+#root {
+  min-height: 100vh;
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  background-color: #ffffff; /* sets white background */
+}
+
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+/* Focus styles */
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+
+/* Basic animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Hover effect for cards */
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: all 0.2s ease-in-out;
+}
+
+/* Success / Error / Warning messages */
+.status {
+  padding: 8px 12px;
+  border-left: 4px solid;
+  border-radius: 4px;
+}
+.status.success { color: #2e7d32; border-color: #2e7d32; background: #e8f5e9; }
+.status.error { color: #d32f2f; border-color: #d32f2f; background: #fdecea; }
+.status.warning { color: #ed6c02; border-color: #ed6c02; background: #fff4e5; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  #root { padding: 0 8px; }
+  .mobile-full { width: 100% !important; }
+}
