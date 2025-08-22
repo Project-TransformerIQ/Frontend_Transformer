@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ImagePreviewDialog from "../pages/ImagePreviewDialog";
 
 import axiosClient from "../api/axiosClient";
@@ -38,6 +39,7 @@ import {
 
 export default function TransformersPage() {
   const [transformers, setTransformers] = useState([]);
+  const navigate = useNavigate();
   //const [form, setForm] = useState({ name: "", site: "", ratingKva: "" });
   const [form, setForm] = useState({transformerNo: "", poleNo: "", region: "",transformerType: "" });
   const REGION_OPTIONS = ["Colombo", "Gampaha", "Kandy", "Galle", "Jaffna"];
@@ -158,20 +160,20 @@ const cancelEdit = () => {
   };
 
   // ----- Images viewer -----
-  const openImages = async (t) => {
-    setViewT(t);
-    setImages([]);
-    setImagesOpen(true);
-    setImagesLoading(true);
-    try {
-      const res = await axiosClient.get(`${apiBase}/${t.id}/images`);
-      setImages(res.data);
-    } catch (e) {
-      showSnackbar(e?.response?.data?.error || "Failed to load images", "error");
-    } finally {
-      setImagesLoading(false);
-    }
-  };
+//  const openImages = async (t) => {
+//    setViewT(t);
+//    setImages([]);
+//    setImagesOpen(true);
+//    setImagesLoading(true);
+//    try {
+//      const res = await axiosClient.get(`${apiBase}/${t.id}/images`);
+//      setImages(res.data);
+//    } catch (e) {
+//      showSnackbar(e?.response?.data?.error || "Failed to load images", "error");
+//    } finally {
+//      setImagesLoading(false);
+//    }
+//  };
 
   
 
@@ -336,7 +338,7 @@ const cancelEdit = () => {
               {transformers.map((t) => (
                 <TableRow
                   key={t.id}
-                  onClick={() => openImages(t)}
+                  onClick={() => navigate(`/transformers/${t.id}/inspections`)}
                   sx={{
                     cursor: 'pointer',
                     '&:hover': { bgcolor: '#f9f9f9' },

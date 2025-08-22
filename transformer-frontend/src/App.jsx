@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import TransformersPage from "./pages/TransformersPage.jsx";
 import ImageUploadPage from "./pages/ImageUploadPage.jsx";
+import TransformerInspectionsPage from "./pages/TransformerInspectionsPage.jsx";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
       <Routes>
         <Route path="/" element={<TransformersPage/>}/>
         <Route path="/upload" element={<ImageUploadPage/>}/>
+        <Route path="/transformers/:id/inspections" element={<TransformerInspectionsPage />} />
       </Routes>
     </BrowserRouter>
   );
