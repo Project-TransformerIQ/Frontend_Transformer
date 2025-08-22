@@ -186,7 +186,7 @@ export default function ImageUploadPage() {
                       <MenuItem key={t.id} value={t.id}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                           <LocationOn fontSize="small" color="action" />
-                          <strong>{t.name}</strong> — {t.site || "-"} ({t.ratingKva ?? "-"} kVA)
+                          <strong>{t.transformerNo}</strong> — {t.poleNo || "-"} ({t.region ?? "-"})
                         </Box>
                       </MenuItem>
                     ))}
@@ -198,9 +198,9 @@ export default function ImageUploadPage() {
                   <Paper sx={{ p: 2, bgcolor: "#f5f5f5" }}>
                     <Typography variant="subtitle2" gutterBottom>Selected Transformer:</Typography>
                     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      <Chip label={selectedTransformer.name} color="primary" size="small" />
-                      <Chip label={selectedTransformer.site || "-"} variant="outlined" size="small" />
-                      <Chip label={`${selectedTransformer.ratingKva ?? "-"} kVA`} variant="outlined" size="small" />
+                      <Chip label={selectedTransformer.transformerNo} color="primary" size="small" />
+                      <Chip label={selectedTransformer.poleNo || "-"} variant="outlined" size="small" />
+                      <Chip label={`${selectedTransformer.region ?? "-"} `} variant="outlined" size="small" />
                     </Box>
                   </Paper>
                 )}
@@ -258,26 +258,6 @@ export default function ImageUploadPage() {
                         </MenuItem>
                       </Select>
                     </FormControl>
-                    <TextField
-                      label="Temperature (°C)"
-                      type="number"
-                      value={env.temperatureC}
-                      onChange={(e) => setEnv({ ...env, temperatureC: e.target.value })}
-                      fullWidth
-                    />
-                    <TextField
-                      label="Humidity (%)"
-                      type="number"
-                      value={env.humidity}
-                      onChange={(e) => setEnv({ ...env, humidity: e.target.value })}
-                      fullWidth
-                    />
-                    <TextField
-                      label="Location Note (optional)"
-                      value={env.locationNote}
-                      onChange={(e) => setEnv({ ...env, locationNote: e.target.value })}
-                      fullWidth
-                    />
                   </Box>
                 )}
 
@@ -416,7 +396,7 @@ export default function ImageUploadPage() {
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="caption" color="text.secondary">Transformer</Typography>
                 <Typography variant="body2">
-                  {selectedTransformer ? selectedTransformer.name : "Not selected"}
+                  {selectedTransformer ? selectedTransformer.transformerNo : "Not selected"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>

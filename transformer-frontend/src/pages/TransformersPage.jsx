@@ -38,7 +38,11 @@ import {
 
 export default function TransformersPage() {
   const [transformers, setTransformers] = useState([]);
-  const [form, setForm] = useState({ name: "", site: "", ratingKva: "" });
+  //const [form, setForm] = useState({ name: "", site: "", ratingKva: "" });
+  const [form, setForm] = useState({transformerNo: "", poleNo: "", region: "",transformerType: "" });
+  const REGION_OPTIONS = ["Colombo", "Gampaha", "Kandy", "Galle", "Jaffna"];
+  const TYPE_OPTIONS = ["BULK", "DISTRIBUTION"];
+
   const [deleteDialog, setDeleteDialog] = useState({ open: false, transformer: null });
   const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -89,49 +93,54 @@ export default function TransformersPage() {
     setSnackbar({ open: true, message, severity });
   };
 
-  const create = async () => {
-    if (!form.name.trim() || !form.site.trim() || form.ratingKva === "") {
-      showSnackbar("Please fill in all fields", "error");
-      return;
+ const create = async () => {
+  const { transformerNo, poleNo, region, transformerType } = form;
+  if (!transformerNo.trim() || !poleNo.trim() || !region || !transformerType) {
+    showSnackbar("Please fill in all fields", "error");
+    return;
+  }
+
+  const payload = {
+    transformerNo: transformerNo.trim(),
+    poleNo: poleNo.trim(),
+    region,                 // string from options
+    transformerType                    // "BULK" | "DISTRIBUTION"
+  };
+
+  try {
+    if (editMode) {
+      await axiosClient.put(`${apiBase}/${editingId}`, payload);
+      showSnackbar("Transformer updated successfully");
+      setEditMode(false);
+      setEditingId(null);
+    } else {
+      await axiosClient.post(apiBase, payload);
+      showSnackbar("Transformer created successfully");
     }
-    const payload = {
-      name: form.name.trim(),
-      site: form.site.trim(),
-      ratingKva: Number(form.ratingKva)
-    };
+    setForm({ transformerNo: "", poleNo: "", region: "", transformerType: "" });
+    load();
+  } catch (error) {
+    showSnackbar(error?.response?.data?.error || "Failed to save transformer", "error");
+  }
+};
 
-    try {
-      if (editMode) {
-        await axiosClient.put(`${apiBase}/${editingId}`, payload);
-        showSnackbar("Transformer updated successfully");
-        setEditMode(false);
-        setEditingId(null);
-      } else {
-        await axiosClient.post(apiBase, payload);
-        showSnackbar("Transformer created successfully");
-      }
-      setForm({ name: "", site: "", ratingKva: "" });
-      load();
-    } catch (error) {
-      showSnackbar(error?.response?.data?.error || "Failed to save transformer", "error");
-    }
-  };
 
-  const startEdit = (transformer) => {
-    setForm({
-      name: transformer.name || "",
-      site: transformer.site || "",
-      ratingKva: transformer.ratingKva?.toString() || ""
-    });
-    setEditMode(true);
-    setEditingId(transformer.id);
-  };
+const startEdit = (t) => {
+  setForm({
+    transformerNo: t.transformerNo || "",
+    poleNo: t.poleNo || "",
+    region: t.region || "",
+    transformerType: t.transformerType || ""
+  });
+  setEditMode(true);
+  setEditingId(t.id);
+};
 
-  const cancelEdit = () => {
-    setForm({ name: "", site: "", ratingKva: "" });
-    setEditMode(false);
-    setEditingId(null);
-  };
+const cancelEdit = () => {
+  setForm({ transformerNo: "", poleNo: "", region: "", transformerType: "" });
+  setEditMode(false);
+  setEditingId(null);
+};
 
   const confirmDelete = (transformer) => {
     setDeleteDialog({ open: true, transformer });
@@ -189,20 +198,9 @@ export default function TransformersPage() {
             <Grid item xs={12} sm={3}>
               <TextField
                 fullWidth
-                label="Name / Code"
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Site / Location"
-                value={form.site}
-                onChange={e => setForm({ ...form, site: e.target.value })}
+                label="Transformer No"
+                value={form.transformerNo}
+                onChange={e => setForm({ ...form, transformerNo: e.target.value })}
                 variant="outlined"
                 size="small"
                 required
@@ -211,14 +209,49 @@ export default function TransformersPage() {
             <Grid item xs={12} sm={3}>
               <TextField
                 fullWidth
-                label="Rating (kVA)"
-                type="number"
-                value={form.ratingKva}
-                onChange={e => setForm({ ...form, ratingKva: e.target.value })}
+                label="Pole No"
+                value={form.poleNo}
+                onChange={e => setForm({ ...form, poleNo: e.target.value })}
                 variant="outlined"
                 size="small"
                 required
               />
+            </Grid>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                select
+                fullWidth
+                label="Region"
+                value={form.region}
+                onChange={e => setForm({ ...form, region: e.target.value })}
+                variant="outlined"
+                size="small"
+                required
+                SelectProps={{ native: true }}
+              >
+                <option value="" />
+                {REGION_OPTIONS.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={2.5}>
+              <TextField
+                select
+                fullWidth
+                label="Type"
+                value={form.transformerType}
+                onChange={e => setForm({ ...form, transformerType: e.target.value })}
+                variant="outlined"
+                size="small"
+                required
+                SelectProps={{ native: true }}
+              >
+                <option value="" />
+                {TYPE_OPTIONS.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </TextField>
             </Grid>
             <Grid item xs={12} sm={2}>
               <Box sx={{ display: 'flex', gap: 1 }}>
@@ -273,19 +306,25 @@ export default function TransformersPage() {
                 <TableCell sx={{ fontWeight: 600 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <ElectricalServices fontSize="small" />
-                    Name / Code
+                    Transformer No
                   </Box>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <LocationOn fontSize="small" />
-                    Site
+                    Pole No
                   </Box>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <PowerInput fontSize="small" />
-                    Rating (kVA)
+                    Region
+                  </Box>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PowerInput fontSize="small" />
+                    Type
                   </Box>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600, textAlign: 'center' }}>
@@ -305,14 +344,12 @@ export default function TransformersPage() {
                   }}
                 >
                   <TableCell>
-                    <Chip label={t.name} color="primary" variant="outlined" size="small" />
+                    <Chip label={t.transformerNo} color="primary" variant="outlined" size="small" />
                   </TableCell>
-                  <TableCell>{t.site || "-"}</TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {t.ratingKva ?? "-"} {t.ratingKva != null ? "kVA" : ""}
-                    </Box>
-                  </TableCell>
+                  <TableCell>{t.poleNo  || "-"}</TableCell>
+                  <TableCell>{t.region || "-"}</TableCell>
+                  <TableCell>{t.transformerType || "-"}</TableCell>
+
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                       <IconButton
