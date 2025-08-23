@@ -9,7 +9,6 @@ import {
   Grid, 
   TextField, 
   Button, 
-  Divider,
   Table, 
   TableHead, 
   TableRow, 
@@ -36,7 +35,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  DialogContentText,
   CardHeader,
   useTheme,
   alpha
@@ -56,15 +54,11 @@ import {
   Schedule,
   Close as CloseIcon,
   Engineering,
-  Visibility,
-  Edit,
-  Delete,
-  Search,
-  FilterList,
-  Analytics,
   TrendingUp,
   Warning,
-  HomeWork
+  Visibility,
+  Search,
+  Analytics
 } from "@mui/icons-material";
 
 export default function TransformerInspectionsPage() {
@@ -77,19 +71,23 @@ export default function TransformerInspectionsPage() {
   const [transformer, setTransformer] = useState(null);
   const [inspections, setInspections] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
+
+  // notifications
   const [snack, setSnack] = useState({ open: false, msg: "", sev: "success" });
+
+  // filters
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
+  // form + dialog
+  const [openDialog, setOpenDialog] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
   const [form, setForm] = useState({
     title: "",
     inspector: "",
     notes: "",
-    status: "OPEN"
+    status: "OPEN",
   });
-
-  // Form validation
   const [formErrors, setFormErrors] = useState({});
   const [touched, setTouched] = useState({});
 
@@ -100,7 +98,7 @@ export default function TransformerInspectionsPage() {
       setLoading(true);
       const [t, ins] = await Promise.all([
         axiosClient.get(`${apiBase}/${id}`),
-        axiosClient.get(`${apiBase}/${id}/inspections`)
+        axiosClient.get(`${apiBase}/${id}/inspections`),
       ]);
       setTransformer(t.data);
       setInspections(ins.data || []);
@@ -111,118 +109,45 @@ export default function TransformerInspectionsPage() {
     }
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
 
-  // Validation
+  // validation
   const validateField = (name, value) => {
     switch (name) {
-      case 'title':
-        if (!value.trim()) return 'Title is required';
-        if (value.trim().length < 3) return 'Title must be at least 3 characters';
-        return '';
-      case 'inspector':
-        if (!value.trim()) return 'Inspector name is required';
-        return '';
+      case "title":
+        if (!value.trim()) return "Title is required";
+        if (value.trim().length < 3) return "Title must be at least 3 characters";
+        return "";
+      case "inspector":
+        if (!value.trim()) return "Inspector name is required";
+        return "";
       default:
-        return '';
+        return "";
     }
   };
 
   const handleFieldChange = (name, value) => {
-    setForm({ ...form, [name]: value });
-    
+    setForm((f) => ({ ...f, [name]: value }));
     if (touched[name]) {
       const error = validateField(name, value);
-      setFormErrors({ ...formErrors, [name]: error });
+      setFormErrors((fe) => ({ ...fe, [name]: error }));
     }
   };
 
   const handleFieldBlur = (name) => {
-    setTouched({ ...touched, [name]: true });
+    setTouched((t) => ({ ...t, [name]: true }));
     const error = validateField(name, form[name]);
-    setFormErrors({ ...formErrors, [name]: error });
+    setFormErrors((fe) => ({ ...fe, [name]: error }));
   };
 
   const isFormValid = () => {
     const newErrors = {};
-    ['title', 'inspector'].forEach(field => {
+    ["title", "inspector"].forEach((field) => {
       const error = validateField(field, form[field]);
       if (error) newErrors[field] = error;
     });
     setFormErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  const addInspection = async () => {
-    if (!isFormValid()) {
-      setTouched({ title: true, inspector: true });
-      return;
-    }
-
-    try {
-      setFormLoading(true);
-      await axiosClient.post(`${apiBase}/${id}/inspections`, {
-        title: form.title.trim(),
-        inspector: form.inspector.trim(),
-        notes: form.notes?.trim() || undefined,
-        status: form.status
-      });
-      toast("Inspection added successfully");
-      setForm({ title: "", inspector: "", notes: "", status: "OPEN" });
-      setFormErrors({});
-      setTouched({});
-      load();
-    } catch (e) {
-      toast(e?.response?.data?.error || "Failed to add inspection", "error");
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  // Filter inspections
-  const filteredInspections = inspections.filter(inspection => {
-    const matchesSearch = !searchTerm || 
-      inspection.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inspection.inspector?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inspection.notes?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === "ALL" || inspection.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
-
-  // Statistics
-  const stats = {
-    total: inspections.length,
-    open: inspections.filter(i => i.status === "OPEN").length,
-    inProgress: inspections.filter(i => i.status === "IN_PROGRESS").length,
-    closed: inspections.filter(i => i.status === "CLOSED").length
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "OPEN": return { color: "info", bgColor: alpha(theme.palette.info.main, 0.1) };
-      case "IN_PROGRESS": return { color: "warning", bgColor: alpha(theme.palette.warning.main, 0.1) };
-      case "CLOSED": return { color: "success", bgColor: alpha(theme.palette.success.main, 0.1) };
-      default: return { color: "default", bgColor: alpha(theme.palette.grey[500], 0.1) };
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "OPEN": return <Schedule fontSize="small" />;
-      case "IN_PROGRESS": return <Engineering fontSize="small" />;
-      case "CLOSED": return <CheckCircle fontSize="small" />;
-      default: return <Warning fontSize="small" />;
-    }
-  };
-
-  const getTransformerTypeInfo = (type) => {
-    const typeInfo = {
-      "BULK": { color: "#4caf50", icon: <Business /> },
-      "DISTRIBUTION": { color: "#ff9800", icon: <Engineering /> }
-    };
-    return typeInfo[type] || { color: "#757575", icon: <PowerInput /> };
   };
 
   const resetForm = () => {
@@ -231,23 +156,107 @@ export default function TransformerInspectionsPage() {
     setTouched({});
   };
 
+  const addInspection = async () => {
+    if (!isFormValid()) {
+      setTouched({ title: true, inspector: true });
+      return false;
+    }
+
+    try {
+      setFormLoading(true);
+      await axiosClient.post(`${apiBase}/${id}/inspections`, {
+        title: form.title.trim(),
+        inspector: form.inspector.trim(),
+        notes: form.notes?.trim() || undefined,
+        status: form.status,
+      });
+
+      toast("Inspection added successfully");
+      resetForm();
+      await load();
+      return true;
+    } catch (e) {
+      toast(e?.response?.data?.error || "Failed to add inspection", "error");
+      return false;
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  // filtering
+  const filteredInspections = inspections.filter((inspection) => {
+    const q = searchTerm.toLowerCase();
+    const matchesSearch =
+      !q ||
+      inspection.title?.toLowerCase().includes(q) ||
+      inspection.inspector?.toLowerCase().includes(q) ||
+      inspection.notes?.toLowerCase().includes(q);
+
+    const matchesStatus =
+      statusFilter === "ALL" || inspection.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  // stats
+  const stats = {
+    total: inspections.length,
+    open: inspections.filter((i) => i.status === "OPEN").length,
+    inProgress: inspections.filter((i) => i.status === "IN_PROGRESS").length,
+    closed: inspections.filter((i) => i.status === "CLOSED").length,
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "OPEN":
+        return { color: "info", bgColor: alpha(theme.palette.info.main, 0.1) };
+      case "IN_PROGRESS":
+        return { color: "warning", bgColor: alpha(theme.palette.warning.main, 0.1) };
+      case "CLOSED":
+        return { color: "success", bgColor: alpha(theme.palette.success.main, 0.1) };
+      default:
+        return { color: "default", bgColor: alpha(theme.palette.grey[500], 0.1) };
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case "OPEN":
+        return <Schedule fontSize="small" />;
+      case "IN_PROGRESS":
+        return <Engineering fontSize="small" />;
+      case "CLOSED":
+        return <CheckCircle fontSize="small" />;
+      default:
+        return <Warning fontSize="small" />;
+    }
+  };
+
+  const getTransformerTypeInfo = (type) => {
+    const typeInfo = {
+      BULK: { color: "#4caf50", icon: <Business /> },
+      DISTRIBUTION: { color: "#ff9800", icon: <Engineering /> },
+    };
+    return typeInfo[type] || { color: "#757575", icon: <PowerInput /> };
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <Fade in timeout={600}>
         <Box>
-          {/* Breadcrumbs & Navigation */}
+          {/* Breadcrumbs & Header */}
           <Box sx={{ mb: 3 }}>
             <Breadcrumbs sx={{ mb: 4 }}>
-              <Link 
-                component="button" 
-                variant="body1" 
-                onClick={() => navigate('/transformers')}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+              <Link
+                component="button"
+                variant="body1"
+                onClick={() => navigate("/transformers")}
+                sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
               >
                 <ElectricalServices fontSize="small" />
                 Transformers
               </Link>
-              <Typography color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography color="text.primary" sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                 <Assessment fontSize="small" />
                 Inspections
               </Typography>
@@ -255,17 +264,18 @@ export default function TransformerInspectionsPage() {
 
             <Stack direction="row" alignItems="center" spacing={2}>
               <Tooltip title="Back to Transformers">
-                <IconButton 
-                  onClick={() => navigate('/transformers')}
-                  sx={{ 
+                <IconButton
+                  onClick={() => navigate("/transformers")}
+                  sx={{
                     bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
+                    "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.2) },
                   }}
                 >
                   <ArrowBack />
                 </IconButton>
               </Tooltip>
-              <Box>
+
+              <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="h4" sx={{ fontWeight: 700, color: theme.palette.primary.main }}>
                   Transformer Inspections
                 </Typography>
@@ -273,40 +283,63 @@ export default function TransformerInspectionsPage() {
                   Monitor and manage thermal inspection records
                 </Typography>
               </Box>
+
+              {/* Create button opens dialog */}
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={() => setOpenDialog(true)}
+              >
+                Create New Inspection
+              </Button>
             </Stack>
           </Box>
 
           {/* Transformer Info Card */}
           <Grow in timeout={800}>
-            <Card sx={{ 
-              mb: 4,
-              borderRadius: 3,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
-              <CardContent sx={{ p: 4, position: 'relative', zIndex: 1 }}>
+            <Card
+              sx={{
+                mb: 4,
+                borderRadius: 3,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                color: "white",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <CardContent sx={{ p: 4, position: "relative", zIndex: 1 }}>
                 {loading ? (
                   <Stack spacing={2}>
-                    <Skeleton variant="text" width="30%" height={32} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }} />
+                    <Skeleton variant="text" width="30%" height={32} sx={{ bgcolor: "rgba(255,255,255,0.2)" }} />
                     <Stack direction="row" spacing={1}>
-                      {[1,2,3,4].map(i => (
-                        <Skeleton key={i} variant="rounded" width={120} height={32} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }} />
+                      {[1, 2, 3, 4].map((i) => (
+                        <Skeleton
+                          key={i}
+                          variant="rounded"
+                          width={120}
+                          height={32}
+                          sx={{ bgcolor: "rgba(255,255,255,0.2)" }}
+                        />
                       ))}
                     </Stack>
                   </Stack>
                 ) : transformer ? (
                   <Stack spacing={3}>
-                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }}>
+                    <Stack
+                      direction={{ xs: "column", md: "row" }}
+                      justifyContent="space-between"
+                      alignItems={{ xs: "flex-start", md: "center" }}
+                    >
                       <Stack direction="row" alignItems="center" spacing={2}>
-                        <Avatar sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.2)',
-                          backdropFilter: 'blur(10px)',
-                          width: 64,
-                          height: 64
-                        }}>
+                        <Avatar
+                          sx={{
+                            bgcolor: "rgba(255,255,255,0.2)",
+                            backdropFilter: "blur(10px)",
+                            width: 64,
+                            height: 64,
+                          }}
+                        >
                           {getTransformerTypeInfo(transformer.transformerType).icon}
                         </Avatar>
                         <Box>
@@ -318,20 +351,20 @@ export default function TransformerInspectionsPage() {
                           </Typography>
                         </Box>
                       </Stack>
-                      
+
                       <Stack direction="row" spacing={2}>
                         <Tooltip title="View Transformer Details">
-                          <Button 
+                          <Button
                             variant="outlined"
                             startIcon={<Visibility />}
                             onClick={() => navigate(`/transformers`)}
-                            sx={{ 
-                              borderColor: 'rgba(255,255,255,0.3)',
-                              color: 'white',
-                              '&:hover': { 
-                                borderColor: 'rgba(255,255,255,0.5)',
-                                bgcolor: 'rgba(255,255,255,0.1)'
-                              }
+                            sx={{
+                              borderColor: "rgba(255,255,255,0.3)",
+                              color: "white",
+                              "&:hover": {
+                                borderColor: "rgba(255,255,255,0.5)",
+                                bgcolor: "rgba(255,255,255,0.1)",
+                              },
                             }}
                           >
                             View Details
@@ -341,31 +374,31 @@ export default function TransformerInspectionsPage() {
                     </Stack>
 
                     <Stack direction="row" spacing={2} flexWrap="wrap">
-                      <Chip 
+                      <Chip
                         icon={<LocationOn fontSize="small" />}
                         label={`Pole: ${transformer.poleNo || "Not specified"}`}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.2)',
-                          color: 'white',
-                          backdropFilter: 'blur(10px)'
+                        sx={{
+                          bgcolor: "rgba(255,255,255,0.2)",
+                          color: "white",
+                          backdropFilter: "blur(10px)",
                         }}
                       />
-                      <Chip 
+                      <Chip
                         icon={<Business fontSize="small" />}
                         label={`Region: ${transformer.region || "Not specified"}`}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.2)',
-                          color: 'white',
-                          backdropFilter: 'blur(10px)'
+                        sx={{
+                          bgcolor: "rgba(255,255,255,0.2)",
+                          color: "white",
+                          backdropFilter: "blur(10px)",
                         }}
                       />
-                      <Chip 
+                      <Chip
                         icon={<PowerInput fontSize="small" />}
                         label={`Type: ${transformer.transformerType || "Not specified"}`}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.2)',
-                          color: 'white',
-                          backdropFilter: 'blur(10px)'
+                        sx={{
+                          bgcolor: "rgba(255,255,255,0.2)",
+                          color: "white",
+                          backdropFilter: "blur(10px)",
                         }}
                       />
                     </Stack>
@@ -381,24 +414,24 @@ export default function TransformerInspectionsPage() {
           <Grow in timeout={1000}>
             <Grid container spacing={3} sx={{ mb: 4 }}>
               {[
-                { label: 'Total Inspections', value: stats.total, color: '#1976d2', icon: <Assessment /> },
-                { label: 'Open', value: stats.open, color: '#2196f3', icon: <Schedule /> },
-                { label: 'In Progress', value: stats.inProgress, color: '#ff9800', icon: <Engineering /> },
-                { label: 'Completed', value: stats.closed, color: '#4caf50', icon: <CheckCircle /> }
-              ].map((stat, index) => (
+                { label: "Total Inspections", value: stats.total, color: "#1976d2", icon: <Assessment /> },
+                { label: "Open", value: stats.open, color: "#2196f3", icon: <Schedule /> },
+                { label: "In Progress", value: stats.inProgress, color: "#ff9800", icon: <Engineering /> },
+                { label: "Completed", value: stats.closed, color: "#4caf50", icon: <CheckCircle /> },
+              ].map((stat) => (
                 <Grid item xs={12} sm={6} md={3} key={stat.label}>
-                  <Card sx={{ 
-                    borderRadius: 3,
-                    background: `linear-gradient(135deg, ${stat.color}20 0%, ${stat.color}10 100%)`,
-                    border: `1px solid ${stat.color}30`,
-                    transition: 'transform 0.2s ease',
-                    '&:hover': { transform: 'translateY(-4px)' }
-                  }}>
+                  <Card
+                    sx={{
+                      borderRadius: 3,
+                      background: `linear-gradient(135deg, ${stat.color}20 0%, ${stat.color}10 100%)`,
+                      border: `1px solid ${stat.color}30`,
+                      transition: "transform 0.2s ease",
+                      "&:hover": { transform: "translateY(-4px)" },
+                    }}
+                  >
                     <CardContent>
                       <Stack direction="row" alignItems="center" spacing={2}>
-                        <Avatar sx={{ bgcolor: stat.color, color: 'white' }}>
-                          {stat.icon}
-                        </Avatar>
+                        <Avatar sx={{ bgcolor: stat.color, color: "white" }}>{stat.icon}</Avatar>
                         <Box>
                           <Typography variant="h4" sx={{ fontWeight: 700, color: stat.color }}>
                             {stat.value}
@@ -415,169 +448,15 @@ export default function TransformerInspectionsPage() {
             </Grid>
           </Grow>
 
-          {/* Add Inspection Form - Centered Layout */}
-          <Grow in timeout={1200}>
-            <Card sx={{ 
-              mb: 4,
-              borderRadius: 3,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-              maxWidth: 800,
-              mx: 'auto'
-            }}>
-              <CardHeader
-                avatar={
-                  <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-                    <Add />
-                  </Avatar>
-                }
-                title={
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Create New Inspection
-                  </Typography>
-                }
-                subheader="Add a new thermal inspection record"
-                sx={{ 
-                  bgcolor: alpha(theme.palette.primary.main, 0.05),
-                  borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
-                }}
-              />
-              <CardContent sx={{ p: 4 }}>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label="Inspection Title"
-                      fullWidth
-                      value={form.title}
-                      onChange={(e) => handleFieldChange('title', e.target.value)}
-                      onBlur={() => handleFieldBlur('title')}
-                      error={!!formErrors.title}
-                      helperText={formErrors.title || "Enter a descriptive title for the inspection"}
-                      required
-                      InputProps={{
-                        startAdornment: <Assessment sx={{ color: 'action.active', mr: 1 }} />
-                      }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label="Inspector Name"
-                      fullWidth
-                      value={form.inspector}
-                      onChange={(e) => handleFieldChange('inspector', e.target.value)}
-                      onBlur={() => handleFieldBlur('inspector')}
-                      error={!!formErrors.inspector}
-                      helperText={formErrors.inspector || "Name of the person conducting the inspection"}
-                      required
-                      InputProps={{
-                        startAdornment: <Person sx={{ color: 'action.active', mr: 1 }} />
-                      }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      select
-                      label="Status"
-                      fullWidth
-                      value={form.status}
-                      onChange={(e) => handleFieldChange('status', e.target.value)}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    >
-                      <MenuItem value="OPEN">
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Schedule fontSize="small" color="info" />
-                          <Typography>Open</Typography>
-                        </Stack>
-                      </MenuItem>
-                      <MenuItem value="IN_PROGRESS">
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Engineering fontSize="small" color="warning" />
-                          <Typography>In Progress</Typography>
-                        </Stack>
-                      </MenuItem>
-                      <MenuItem value="CLOSED">
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <CheckCircle fontSize="small" color="success" />
-                          <Typography>Closed</Typography>
-                        </Stack>
-                      </MenuItem>
-                    </TextField>
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <Stack direction="row" spacing={2} sx={{ height: '100%', alignItems: 'flex-end' }}>
-                      <Button 
-                        variant="outlined" 
-                        onClick={resetForm}
-                        sx={{ borderRadius: 2, height: 56 }}
-                        disabled={formLoading}
-                      >
-                        Reset
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        startIcon={formLoading ? null : <Add />} 
-                        onClick={addInspection} 
-                        fullWidth
-                        disabled={formLoading}
-                        sx={{ 
-                          borderRadius: 2,
-                          background: 'linear-gradient(45deg, #667eea 30%, #764ba2 90%)',
-                          height: 56
-                        }}
-                      >
-                        {formLoading ? 'Adding...' : 'Add Inspection'}
-                      </Button>
-                    </Stack>
-                  </Grid>
-
-                  <Grid item xs={12}>
-                    <TextField
-                      label="Inspection Notes"
-                      fullWidth
-                      multiline
-                      rows={4}
-                      value={form.notes}
-                      onChange={(e) => handleFieldChange('notes', e.target.value)}
-                      placeholder="Add detailed notes about the inspection findings..."
-                      InputProps={{
-                        startAdornment: <Notes sx={{ color: 'action.active', mr: 1, alignSelf: 'flex-start', mt: 1 }} />
-                      }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    />
-                  </Grid>
-                </Grid>
-              </CardContent>
-              {formLoading && <LinearProgress sx={{ height: 3 }} />}
-            </Card>
-          </Grow>
-
-          {/* Inspections List - Centered Full Width */}
+          {/* Inspections List */}
           <Grow in timeout={1400}>
-            <Card sx={{ 
-              borderRadius: 3,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-              width: '100%'
-            }}>
+            <Card
+              sx={{
+                borderRadius: 3,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                width: "100%",
+              }}
+            >
               <CardHeader
                 avatar={
                   <Badge badgeContent={inspections.length} color="primary">
@@ -593,14 +472,14 @@ export default function TransformerInspectionsPage() {
                 }
                 subheader={`${filteredInspections.length} of ${inspections.length} inspections`}
                 action={
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                     <TextField
                       size="small"
                       placeholder="Search inspections..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       InputProps={{
-                        startAdornment: <Search sx={{ color: 'action.active' }} />
+                        startAdornment: <Search sx={{ color: "action.active" }} />,
                       }}
                       sx={{ minWidth: 200 }}
                     />
@@ -618,9 +497,9 @@ export default function TransformerInspectionsPage() {
                     </TextField>
                   </Stack>
                 }
-                sx={{ 
+                sx={{
                   bgcolor: alpha(theme.palette.secondary.main, 0.05),
-                  borderBottom: `1px solid ${alpha(theme.palette.secondary.main, 0.1)}`
+                  borderBottom: `1px solid ${alpha(theme.palette.secondary.main, 0.1)}`,
                 }}
               />
 
@@ -633,30 +512,34 @@ export default function TransformerInspectionsPage() {
                     </Typography>
                   </Box>
                 ) : filteredInspections.length === 0 ? (
-                  <Box sx={{ 
-                    p: 8, 
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 2
-                  }}>
-                    <Avatar sx={{ 
-                      width: 64, 
-                      height: 64, 
-                      bgcolor: alpha(theme.palette.text.secondary, 0.1) 
-                    }}>
-                      <Assessment sx={{ fontSize: 32, color: 'text.secondary' }} />
+                  <Box
+                    sx={{
+                      p: 8,
+                      textAlign: "center",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 2,
+                    }}
+                  >
+                    <Avatar
+                      sx={{
+                        width: 64,
+                        height: 64,
+                        bgcolor: alpha(theme.palette.text.secondary, 0.1),
+                      }}
+                    >
+                      <Assessment sx={{ fontSize: 32, color: "text.secondary" }} />
                     </Avatar>
                     <Typography variant="h6" color="text.secondary">
-                      {searchTerm || statusFilter !== "ALL" 
-                        ? "No inspections match your criteria" 
+                      {searchTerm || statusFilter !== "ALL"
+                        ? "No inspections match your criteria"
                         : "No inspections recorded yet"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {searchTerm || statusFilter !== "ALL"
                         ? "Try adjusting your search or filter settings"
-                        : "Create your first inspection record using the form above"}
+                        : "Use the button above to create your first inspection"}
                     </Typography>
                   </Box>
                 ) : (
@@ -695,28 +578,30 @@ export default function TransformerInspectionsPage() {
                           const statusConfig = getStatusColor(inspection.status);
                           return (
                             <Fade key={inspection.id} in timeout={200 + index * 100}>
-                              <TableRow sx={{
-                                '&:hover': { 
-                                  bgcolor: alpha(theme.palette.primary.main, 0.04),
-                                  transform: 'scale(1.01)'
-                                },
-                                transition: 'all 0.2s ease',
-                                cursor: 'pointer'
-                              }}>
+                              <TableRow
+                                sx={{
+                                  "&:hover": {
+                                    bgcolor: alpha(theme.palette.primary.main, 0.04),
+                                    transform: "scale(1.01)",
+                                  },
+                                  transition: "all 0.2s ease",
+                                  cursor: "default",
+                                }}
+                              >
                                 <TableCell>
                                   <Box>
                                     <Typography variant="body1" sx={{ fontWeight: 500, mb: 0.5 }}>
                                       {inspection.title}
                                     </Typography>
                                     {inspection.notes && (
-                                      <Typography 
-                                        variant="caption" 
+                                      <Typography
+                                        variant="caption"
                                         color="text.secondary"
-                                        sx={{ 
-                                          display: '-webkit-box',
+                                        sx={{
+                                          display: "-webkit-box",
                                           WebkitLineClamp: 1,
-                                          WebkitBoxOrient: 'vertical',
-                                          overflow: 'hidden'
+                                          WebkitBoxOrient: "vertical",
+                                          overflow: "hidden",
                                         }}
                                       >
                                         {inspection.notes}
@@ -737,7 +622,7 @@ export default function TransformerInspectionsPage() {
                                 <TableCell>
                                   <Chip
                                     icon={getStatusIcon(inspection.status)}
-                                    label={inspection.status?.replace('_', ' ') || "Unknown"}
+                                    label={inspection.status?.replace("_", " ") || "Unknown"}
                                     color={statusConfig.color}
                                     size="small"
                                     sx={{ fontWeight: 500 }}
@@ -746,16 +631,14 @@ export default function TransformerInspectionsPage() {
                                 <TableCell>
                                   <Stack spacing={0.5}>
                                     <Typography variant="body2">
-                                      {inspection.createdAt 
+                                      {inspection.createdAt
                                         ? new Date(inspection.createdAt).toLocaleDateString()
-                                        : "Unknown"
-                                      }
+                                        : "Unknown"}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                      {inspection.createdAt 
+                                      {inspection.createdAt
                                         ? new Date(inspection.createdAt).toLocaleTimeString()
-                                        : ""
-                                      }
+                                        : ""}
                                     </Typography>
                                   </Stack>
                                 </TableCell>
@@ -771,12 +654,115 @@ export default function TransformerInspectionsPage() {
             </Card>
           </Grow>
 
+          {/* Create Inspection Dialog */}
+          <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ pr: 7 }}>
+              Create New Inspection
+              <IconButton
+                onClick={() => setOpenDialog(false)}
+                sx={{ position: "absolute", right: 8, top: 8 }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+
+            <DialogContent dividers>
+              <Stack spacing={3}>
+                <TextField
+                  label="Inspection Title"
+                  fullWidth
+                  value={form.title}
+                  onChange={(e) => handleFieldChange("title", e.target.value)}
+                  onBlur={() => handleFieldBlur("title")}
+                  error={!!formErrors.title}
+                  helperText={formErrors.title || "Enter a descriptive title"}
+                  required
+                  InputProps={{
+                    startAdornment: <Assessment sx={{ color: "action.active", mr: 1 }} />,
+                  }}
+                />
+
+                <TextField
+                  label="Inspector Name"
+                  fullWidth
+                  value={form.inspector}
+                  onChange={(e) => handleFieldChange("inspector", e.target.value)}
+                  onBlur={() => handleFieldBlur("inspector")}
+                  error={!!formErrors.inspector}
+                  helperText={formErrors.inspector || "Who is conducting the inspection?"}
+                  required
+                  InputProps={{
+                    startAdornment: <Person sx={{ color: "action.active", mr: 1 }} />,
+                  }}
+                />
+
+                <TextField
+                  select
+                  label="Status"
+                  fullWidth
+                  value={form.status}
+                  onChange={(e) => handleFieldChange("status", e.target.value)}
+                >
+                  <MenuItem value="OPEN">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Schedule fontSize="small" color="info" />
+                      <Typography>Open</Typography>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="IN_PROGRESS">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Engineering fontSize="small" color="warning" />
+                      <Typography>In Progress</Typography>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="CLOSED">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <CheckCircle fontSize="small" color="success" />
+                      <Typography>Closed</Typography>
+                    </Stack>
+                  </MenuItem>
+                </TextField>
+
+                <TextField
+                  label="Inspection Notes"
+                  fullWidth
+                  multiline
+                  rows={4}
+                  value={form.notes}
+                  onChange={(e) => handleFieldChange("notes", e.target.value)}
+                  placeholder="Add detailed notes about the inspection findings..."
+                  InputProps={{
+                    startAdornment: (
+                      <Notes sx={{ color: "action.active", mr: 1, alignSelf: "flex-start", mt: 1 }} />
+                    ),
+                  }}
+                />
+              </Stack>
+            </DialogContent>
+
+
+            <DialogActions sx={{ px: 3, py: 1.5 }}>
+              <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={async () => {
+                  const ok = await addInspection();
+                  if (ok) setOpenDialog(false);
+                }}
+                disabled={formLoading}
+              >
+                {formLoading ? "Adding..." : "Add Inspection"}
+              </Button>
+            </DialogActions>
+          </Dialog>
+
           {/* Snackbar */}
           <Snackbar
             open={snack.open}
             autoHideDuration={5000}
             onClose={() => setSnack({ ...snack, open: false })}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           >
             <Alert
               onClose={() => setSnack({ ...snack, open: false })}
