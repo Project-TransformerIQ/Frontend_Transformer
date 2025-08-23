@@ -250,7 +250,7 @@ export default function TransformerInspectionsPage() {
               <Link
                 component="button"
                 variant="body1"
-                onClick={() => navigate("/transformers")}
+                onClick={() => navigate("/")}
                 sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
               >
                 <ElectricalServices fontSize="small" />
