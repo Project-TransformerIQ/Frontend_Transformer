@@ -35,6 +35,9 @@ import {
   DialogContent,
   DialogActions,
   CardHeader,
+  FormControl,
+  InputLabel,
+  Select,
   useTheme,
   alpha,
 } from "@mui/material";
@@ -60,6 +63,9 @@ import {
   Analytics,
   CloudUpload,
   Image as ImageIcon,
+  WbSunny,
+  Cloud,
+  Umbrella,
 } from "@mui/icons-material";
 
 export default function TransformerInspectionsPage() {
@@ -93,13 +99,15 @@ export default function TransformerInspectionsPage() {
   const [formErrors, setFormErrors] = useState({});
   const [touched, setTouched] = useState({});
 
-  // --- NEW: upload dialog state ---
+  // --- Upload dialog state ---
   const [openUpload, setOpenUpload] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // NEW: environment weather for upload
+  const [weather, setWeather] = useState("SUNNY"); // SUNNY | CLOUDY | RAINY
 
   const load = async () => {
     try {
@@ -231,11 +239,12 @@ export default function TransformerInspectionsPage() {
     return typeInfo[type] || { color: "#757575", icon: <PowerInput /> };
   };
 
-  // --- NEW: upload helpers ---
+  // --- Upload helpers ---
   const openUploadFor = (inspection) => {
     setSelectedInspection(inspection);
     setUploadFile(null);
     setPreview(null);
+    setWeather("SUNNY"); // default each time
     setOpenUpload(true);
   };
   const handleFileSelect = (file) => {
@@ -257,18 +266,18 @@ export default function TransformerInspectionsPage() {
     try {
       const formData = new FormData();
 
-      // Reuse your existing meta shape; tag the inspection id.
+      // Include inspectionId and envCondition.weather
       const meta = {
         imageType: "MAINTENANCE",
         uploader: selectedInspection.inspector || "Unknown",
-        inspectionId: selectedInspection.id, // backend can use this to link
+        inspectionId: selectedInspection.id,
+        envCondition: { weather }, // SUNNY | CLOUDY | RAINY
       };
 
       formData.append("meta", new Blob([JSON.stringify(meta)], { type: "application/json" }));
       formData.append("file", uploadFile);
 
-      // If your API is /transformers/:id/inspections/:inspectionId/images,
-      // replace the next line with:
+      // If your API is /transformers/:id/inspections/:inspectionId/images, change this line:
       // const uploadUrl = `${apiBase}/${id}/inspections/${selectedInspection.id}/images`;
       const uploadUrl = `${apiBase}/${id}/images`;
 
@@ -297,7 +306,7 @@ export default function TransformerInspectionsPage() {
               <Link
                 component="button"
                 variant="body1"
-                onClick={() => navigate("/")}  // home
+                onClick={() => navigate("/")}
                 sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
               >
                 <ElectricalServices fontSize="small" />
@@ -708,7 +717,7 @@ export default function TransformerInspectionsPage() {
             </DialogActions>
           </Dialog>
 
-          {/* Upload Image Dialog (opens when row is clicked) */}
+          {/* Upload Image Dialog (row click) */}
           <Dialog open={openUpload} onClose={() => setOpenUpload(false)} fullWidth maxWidth="sm">
             <DialogTitle sx={{ pr: 7 }}>
               Upload Image {selectedInspection ? `– ${selectedInspection.title}` : ""}
@@ -718,6 +727,36 @@ export default function TransformerInspectionsPage() {
             </DialogTitle>
 
             <DialogContent dividers>
+              {/* Weather selection */}
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Weather</InputLabel>
+                <Select
+                  value={weather}
+                  label="Weather"
+                  onChange={(e) => setWeather(e.target.value)}
+                >
+                  <MenuItem value="SUNNY">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <WbSunny fontSize="small" color="warning" />
+                      <Typography>Sunny</Typography>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="CLOUDY">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Cloud fontSize="small" color="action" />
+                      <Typography>Cloudy</Typography>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="RAINY">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Umbrella fontSize="small" color="primary" />
+                      <Typography>Rainy</Typography>
+                    </Stack>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Drop zone */}
               <Box
                 sx={{
                   border: 2,
