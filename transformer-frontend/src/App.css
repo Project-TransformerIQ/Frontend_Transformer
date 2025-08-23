@@ -1,3 +1,39 @@
+/* Dashboard cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+/* Page header (title + actions) */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.page-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+/* Filters/search */
+.filters-bar { display: flex; flex-wrap: wrap; gap: .75rem; }
+.search-box { flex: 1 1 260px; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+@media (max-width: 768px){
+  .search-box { flex-basis: 100%; }
+  .chips { overflow-x: auto; }
+}
+
+/* Table responsive */
+.table-responsive { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; }
+@media (max-width: 640px){
+  .table thead { display: none; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table tr { margin-bottom: .75rem; border: 1px solid #ddd; border-radius: .5rem; padding: .5rem; }
+  .table td::before { content: attr(data-label); font-weight: 600; margin-right: .5rem; }
+}
+
+
 /* Global styles */
 #root {
   min-height: 100vh;

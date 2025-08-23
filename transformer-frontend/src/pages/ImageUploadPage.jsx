@@ -1,34 +1,35 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import {
-  Button,
-  MenuItem,
-  Select,
-  TextField,
+  Alert,
+  Avatar,
   Box,
-  Typography,
+  Button,
   Card,
   CardContent,
-  FormControl,
-  InputLabel,
-  Grid,
-  Paper,
-  LinearProgress,
   Chip,
-  Alert,
+  FormControl,
+  Grid,
+  InputAdornment,
+  InputLabel,
+  LinearProgress,
+  MenuItem,
+  Paper,
+  Select,
   Snackbar,
-  Avatar
+  TextField,
+  Typography,
 } from "@mui/material";
 import {
+  CheckCircle,
+  Cloud,
   CloudUpload,
-  Image,
-  ThermostatAuto,
+  Image as ImageIcon,
   LocationOn,
   Person,
-  WbSunny,
-  Cloud,
+  ThermostatAuto,
   Umbrella,
-  CheckCircle
+  WbSunny,
 } from "@mui/icons-material";
 
 export default function ImageUploadPage() {
@@ -45,21 +46,27 @@ export default function ImageUploadPage() {
   const [uploader, setUploader] = useState("");
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
   const [dragOver, setDragOver] = useState(false);
 
-  const apiBase = "/transformers"; // change to "/transformers" if axiosClient.baseURL = "/api"
+  // change to "/transformers" if axiosClient.baseURL = "/api"
+  const apiBase = "/transformers";
 
   useEffect(() => {
     (async () => {
       try {
         const res = await axiosClient.get(apiBase);
         setTransformers(res.data);
-      } catch (error) {
+      } catch {
         showSnackbar("Failed to load transformers", "error");
       }
     })();
-  }, []); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showSnackbar = (message, severity = "success") => {
     setSnackbar({ open: true, message, severity });
@@ -79,7 +86,7 @@ export default function ImageUploadPage() {
   const handleDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
+    const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile && droppedFile.type.startsWith("image/")) {
       handleFileSelect(droppedFile);
     } else {
@@ -87,7 +94,8 @@ export default function ImageUploadPage() {
     }
   };
 
-  const toNumberOrUndefined = (v) => (v === "" || v === null ? undefined : Number(v));
+  const toNumberOrUndefined = (v) =>
+    v === "" || v === null ? undefined : Number(v);
 
   const upload = async () => {
     if (!selectedId || !file || !uploader.trim()) {
@@ -108,7 +116,7 @@ export default function ImageUploadPage() {
         ...(imageType === "BASELINE"
           ? {
               envCondition: {
-                weather: env.weather,                       // SUNNY | CLOUDY | RAINY
+                weather: env.weather, // SUNNY | CLOUDY | RAINY
                 temperatureC: toNumberOrUndefined(env.temperatureC),
                 humidity: toNumberOrUndefined(env.humidity),
                 locationNote: env.locationNote?.trim() || undefined,
@@ -117,7 +125,10 @@ export default function ImageUploadPage() {
           : {}),
       };
 
-      formData.append("meta", new Blob([JSON.stringify(meta)], { type: "application/json" }));
+      formData.append(
+        "meta",
+        new Blob([JSON.stringify(meta)], { type: "application/json" })
+      );
       formData.append("file", file);
 
       await axiosClient.post(`${apiBase}/${selectedId}/images`, formData, {
@@ -132,9 +143,17 @@ export default function ImageUploadPage() {
       setUploader("");
       setSelectedId(null);
       setImageType("BASELINE");
-      setEnv({ weather: "SUNNY", temperatureC: "", humidity: "", locationNote: "" });
+      setEnv({
+        weather: "SUNNY",
+        temperatureC: "",
+        humidity: "",
+        locationNote: "",
+      });
     } catch (error) {
-      showSnackbar(error?.response?.data?.error || "Failed to upload image", "error");
+      showSnackbar(
+        error?.response?.data?.error || "Failed to upload image",
+        "error"
+      );
     } finally {
       setUploading(false);
     }
@@ -142,25 +161,42 @@ export default function ImageUploadPage() {
 
   const getEnvIcon = (condition) => {
     switch (condition) {
-      case "SUNNY": return <WbSunny />;
-      case "CLOUDY": return <Cloud />;
-      case "RAINY": return <Umbrella />;
-      default: return <WbSunny />;
+      case "SUNNY":
+        return <WbSunny />;
+      case "CLOUDY":
+        return <Cloud />;
+      case "RAINY":
+        return <Umbrella />;
+      default:
+        return <WbSunny />;
     }
   };
 
   const selectedTransformer = transformers.find((t) => t.id === selectedId);
 
   return (
-    <Box sx={{ p: 2, maxWidth: 1000, mx: "auto" }}>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1200, mx: "auto" }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ color: "#1976d2", fontWeight: 600 }}>
-          <ThermostatAuto sx={{ mr: 2, verticalAlign: "middle" }} />
+      <Box sx={{ mb: 3 }}>
+        <Typography
+          variant="h4"
+          component="h1"
+          gutterBottom
+          sx={{
+            color: "#1976d2",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            fontSize: { xs: "1.6rem", sm: "2rem" },
+          }}
+        >
+          <ThermostatAuto sx={{ flex: "0 0 auto" }} />
           Upload Thermal Images
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Upload baseline and maintenance thermal images for transformer inspection
+          Upload baseline and maintenance thermal images for transformer
+          inspection
         </Typography>
       </Box>
 
@@ -169,7 +205,11 @@ export default function ImageUploadPage() {
         <Grid item xs={12} md={6}>
           <Card sx={{ boxShadow: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: "#1976d2", mb: 3 }}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ color: "#1976d2", mb: 3 }}
+              >
                 Image Details
               </Typography>
 
@@ -184,9 +224,34 @@ export default function ImageUploadPage() {
                   >
                     {transformers.map((t) => (
                       <MenuItem key={t.id} value={t.id}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                            minWidth: 0,
+                          }}
+                        >
                           <LocationOn fontSize="small" color="action" />
-                          <strong>{t.transformerNo}</strong> — {t.poleNo || "-"} ({t.region ?? "-"})
+                          <strong>{t.transformerNo}</strong>
+                          <Box
+                            component="span"
+                            sx={{ color: "text.secondary", mx: 0.5 }}
+                          >
+                            —
+                          </Box>
+                          <Box
+                            component="span"
+                            sx={{
+                              color: "text.secondary",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={`${t.poleNo || "-"} (${t.region ?? "-"})`}
+                          >
+                            {t.poleNo || "-"} ({t.region ?? "-"})
+                          </Box>
                         </Box>
                       </MenuItem>
                     ))}
@@ -196,11 +261,25 @@ export default function ImageUploadPage() {
                 {/* Selected Transformer Info */}
                 {selectedTransformer && (
                   <Paper sx={{ p: 2, bgcolor: "#f5f5f5" }}>
-                    <Typography variant="subtitle2" gutterBottom>Selected Transformer:</Typography>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Selected Transformer:
+                    </Typography>
                     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      <Chip label={selectedTransformer.transformerNo} color="primary" size="small" />
-                      <Chip label={selectedTransformer.poleNo || "-"} variant="outlined" size="small" />
-                      <Chip label={`${selectedTransformer.region ?? "-"} `} variant="outlined" size="small" />
+                      <Chip
+                        label={selectedTransformer.transformerNo}
+                        color="primary"
+                        size="small"
+                      />
+                      <Chip
+                        label={selectedTransformer.poleNo || "-"}
+                        variant="outlined"
+                        size="small"
+                      />
+                      <Chip
+                        label={`${selectedTransformer.region ?? "-"}`}
+                        variant="outlined"
+                        size="small"
+                      />
                     </Box>
                   </Paper>
                 )}
@@ -230,34 +309,81 @@ export default function ImageUploadPage() {
 
                 {/* Environmental Condition (only for baseline) */}
                 {imageType === "BASELINE" && (
-                  <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 2,
+                      gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                    }}
+                  >
                     <FormControl fullWidth required>
                       <InputLabel>Weather</InputLabel>
                       <Select
                         value={env.weather}
                         label="Weather"
-                        onChange={(e) => setEnv({ ...env, weather: e.target.value })}
+                        onChange={(e) =>
+                          setEnv({ ...env, weather: e.target.value })
+                        }
                       >
                         <MenuItem value="SUNNY">
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                          >
                             <WbSunny fontSize="small" color="warning" />
                             Sunny
                           </Box>
                         </MenuItem>
                         <MenuItem value="CLOUDY">
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                          >
                             <Cloud fontSize="small" color="action" />
                             Cloudy
                           </Box>
                         </MenuItem>
                         <MenuItem value="RAINY">
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                          >
                             <Umbrella fontSize="small" color="primary" />
                             Rainy
                           </Box>
                         </MenuItem>
                       </Select>
                     </FormControl>
+
+                    {/* Temperature & Humidity – optional inputs (stay side-by-side on ≥sm) */}
+                    <TextField
+                      label="Temperature (°C)"
+                      type="number"
+                      value={env.temperatureC}
+                      onChange={(e) =>
+                        setEnv({ ...env, temperatureC: e.target.value })
+                      }
+                      inputProps={{ inputMode: "numeric", step: "any" }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Humidity (%)"
+                      type="number"
+                      value={env.humidity}
+                      onChange={(e) =>
+                        setEnv({ ...env, humidity: e.target.value })
+                      }
+                      inputProps={{ inputMode: "numeric", step: "any" }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Location Note (optional)"
+                      value={env.locationNote}
+                      onChange={(e) =>
+                        setEnv({ ...env, locationNote: e.target.value })
+                      }
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      sx={{ gridColumn: { xs: "1 / -1", sm: "1 / -1" } }}
+                    />
                   </Box>
                 )}
 
@@ -269,7 +395,11 @@ export default function ImageUploadPage() {
                   onChange={(e) => setUploader(e.target.value)}
                   required
                   InputProps={{
-                    startAdornment: <Person sx={{ color: "action.active", mr: 1 }} />
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Person sx={{ color: "action.active" }} />
+                      </InputAdornment>
+                    ),
                   }}
                 />
               </Box>
@@ -281,18 +411,24 @@ export default function ImageUploadPage() {
         <Grid item xs={12} md={6}>
           <Card sx={{ boxShadow: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: "#1976d2", mb: 3 }}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ color: "#1976d2", mb: 3 }}
+              >
                 Thermal Image File
               </Typography>
 
               {/* File Drop Zone */}
               <Paper
+                role="button"
+                aria-label="Upload image"
                 sx={{
                   border: 2,
                   borderStyle: "dashed",
                   borderColor: dragOver ? "primary.main" : "grey.300",
                   bgcolor: dragOver ? "primary.50" : "grey.50",
-                  p: 3,
+                  p: { xs: 2, sm: 3 },
                   textAlign: "center",
                   cursor: "pointer",
                   transition: "all 0.2s",
@@ -311,12 +447,22 @@ export default function ImageUploadPage() {
               >
                 {preview ? (
                   <Box>
-                    <img
+                    <Box
+                      component="img"
                       src={preview}
                       alt="Preview"
-                      style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8 }}
+                      sx={{
+                        width: "100%",
+                        height: "auto",
+                        maxHeight: { xs: 240, sm: 300 },
+                        objectFit: "contain",
+                        borderRadius: 1,
+                      }}
                     />
-                    <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ mt: 1, color: "text.secondary" }}
+                    >
                       {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
                     </Typography>
                     <Button
@@ -335,9 +481,13 @@ export default function ImageUploadPage() {
                 ) : (
                   <Box>
                     <Avatar sx={{ bgcolor: "primary.main", mx: "auto", mb: 2 }}>
-                      <Image />
+                      <ImageIcon />
                     </Avatar>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography
+                      variant="h6"
+                      gutterBottom
+                      sx={{ fontSize: { xs: "1rem", sm: "1.125rem" } }}
+                    >
                       Drop your thermal image here
                     </Typography>
                     <Typography variant="body2" color="text.secondary" paragraph>
@@ -355,14 +505,17 @@ export default function ImageUploadPage() {
                 type="file"
                 accept="image/*"
                 hidden
-                onChange={(e) => handleFileSelect(e.target.files[0])}
+                onChange={(e) => handleFileSelect(e.target.files?.[0])}
               />
 
               {/* Upload Progress */}
               {uploading && (
                 <Box sx={{ mt: 2 }}>
                   <LinearProgress />
-                  <Typography variant="body2" sx={{ mt: 1, textAlign: "center" }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ mt: 1, textAlign: "center" }}
+                  >
                     Uploading image...
                   </Typography>
                 </Box>
@@ -394,13 +547,19 @@ export default function ImageUploadPage() {
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">Transformer</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Transformer
+                </Typography>
                 <Typography variant="body2">
-                  {selectedTransformer ? selectedTransformer.transformerNo : "Not selected"}
+                  {selectedTransformer
+                    ? selectedTransformer.transformerNo
+                    : "Not selected"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">Image Type</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Image Type
+                </Typography>
                 <Typography variant="body2">
                   {imageType === "BASELINE" ? "Baseline" : "Maintenance"}
                 </Typography>
@@ -408,24 +567,32 @@ export default function ImageUploadPage() {
               {imageType === "BASELINE" && (
                 <>
                   <Grid item xs={12} sm={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">Environment</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Environment
+                    </Typography>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       {getEnvIcon(env.weather)}
                       <Typography variant="body2">
-                        {env.weather.charAt(0) + env.weather.slice(1).toLowerCase()}
+                        {env.weather.charAt(0) +
+                          env.weather.slice(1).toLowerCase()}
                       </Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={12} sm={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">Temp / Humidity</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Temp / Humidity
+                    </Typography>
                     <Typography variant="body2">
-                      {(env.temperatureC || "-") + " °C"} &nbsp;|&nbsp; {(env.humidity || "-") + " %"}
+                      {(env.temperatureC || "-") + " °C"} &nbsp;|&nbsp;
+                      {(env.humidity || "-") + " %"}
                     </Typography>
                   </Grid>
                 </>
               )}
               <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">File</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  File
+                </Typography>
                 <Typography variant="body2">
                   {file ? file.name : "No file selected"}
                 </Typography>
