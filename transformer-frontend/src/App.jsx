@@ -6,10 +6,10 @@ import TransformerInspectionsPage from "./pages/TransformerInspectionsPage.jsx";
 function App() {
   return (
     <BrowserRouter>
-      <nav style={{display:"flex", gap:"1rem", padding:"1rem"}}>
+      {/* <nav style={{display:"flex", gap:"1rem", padding:"1rem"}}>
         <Link to="/">Transformers</Link>
         <Link to="/upload">Upload Image</Link>
-      </nav>
+      </nav> */}
       <Routes>
         <Route path="/" element={<TransformersPage/>}/>
         <Route path="/upload" element={<ImageUploadPage/>}/>

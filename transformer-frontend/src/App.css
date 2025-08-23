@@ -33,26 +33,40 @@
   .table td::before { content: attr(data-label); font-weight: 600; margin-right: .5rem; }
 }
 
-
 /* Global styles */
-#root {
+html, body, #root {
   min-height: 100vh;
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
-  background-color: #ffffff; /* sets white background */
+  background-color: #ffffff; /* fallback */
+  position: relative;
 }
 
+/* Low transparency background image */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  /* Option 1: overlay with white wash */
+  /* background:
+    linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)),
+    url("/src/assets/electricity-pylons.jpg") center / cover no-repeat; */
+
+  /* Option 2 (alternative): uncomment below if you prefer pure opacity */
+  background: url("/src/assets/electricity-pylons.jpg") center / cover no-repeat;
+  opacity: 0.06;
+ 
+}
 
 /* Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
+::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb {
   background: #c1c1c1;
   border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
+::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
 * {
   scrollbar-width: thin;
   scrollbar-color: #c1c1c1 #f1f1f1;
@@ -72,9 +86,7 @@ textarea:focus {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.fade-in {
-  animation: fadeIn 0.3s ease-in;
-}
+.fade-in { animation: fadeIn 0.3s ease-in; }
 
 /* Hover effect for cards */
 .card-hover:hover {

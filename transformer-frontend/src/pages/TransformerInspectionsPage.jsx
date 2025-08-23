@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import {
@@ -12,9 +12,9 @@ import {
 import {
   ArrowBack, Add, ElectricalServices, LocationOn, Business, PowerInput,
   Assessment, Person, CalendarToday, Notes, CheckCircle, Schedule,
-  Close as CloseIcon, Engineering, TrendingUp, Warning, Visibility, Search,
+  Close as CloseIcon, Engineering, TrendingUp, Warning, Search,
   Analytics, CloudUpload, Image as ImageIcon, WbSunny, Cloud, Umbrella,
-  Info
+  Info, ArrowBackIosNew, ArrowForwardIos
 } from "@mui/icons-material";
 
 export default function TransformerInspectionsPage() {
@@ -65,6 +65,12 @@ export default function TransformerInspectionsPage() {
     preview: null,
   });
   const [uploadingBaseline, setUploadingBaseline] = useState(false);
+
+  // COMPARE dialog
+  const [openCompare, setOpenCompare] = useState(false);
+  const [compareInspection, setCompareInspection] = useState(null);
+  const [compareImages, setCompareImages] = useState([]); // inspection images
+  const [compareIndex, setCompareIndex] = useState(0);
 
   const handleBaselineFile = (f) => {
     setBaseline((b) => ({ ...b, file: f || null }));
@@ -182,7 +188,7 @@ export default function TransformerInspectionsPage() {
     s === "IN_PROGRESS" ? <Engineering fontSize="small" /> :
     s === "CLOSED" ? <CheckCircle fontSize="small" /> :
     <Warning fontSize="small" />;
-  const getTransformerTypeInfo = (type) => {
+  const getTransformerTypeIcon = (type) => {
     const map = { BULK: <Business />, DISTRIBUTION: <Engineering /> };
     return map[type] || <PowerInput />;
   };
@@ -265,6 +271,48 @@ export default function TransformerInspectionsPage() {
 
   const noImagesYet = (images?.length || 0) === 0;
 
+  // ---- Compare helpers ----
+  const baselineImage = useMemo(() => {
+    const baselines = (images || []).filter((img) => img.imageType === "BASELINE");
+    if (!baselines.length) return null;
+    // pick the latest by createdAt (fallback to first)
+    return baselines.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  }, [images]);
+
+  const rawUrl = (img) => `${apiBase}/images/${img.id}/raw`;
+
+  const openCompareFor = async (inspection) => {
+    setCompareInspection(inspection);
+    setCompareImages([]);
+    setCompareIndex(0);
+    setOpenCompare(true);
+
+    // Try to find images for this inspection from the global images list
+    let imgs = (images || []).filter(
+      (im) => im.imageType === "MAINTENANCE" && (im.inspectionId === inspection.id)
+    );
+
+    // Fallback: fetch from dedicated endpoint if not found on list
+    if (!imgs.length) {
+      try {
+        const res = await axiosClient.get(`${apiBase}/${id}/inspections/${inspection.id}/images`);
+        imgs = res.data || [];
+      } catch {
+        // ignore; we'll show empty state
+      }
+    }
+    setCompareImages(imgs);
+  };
+
+  const nextCompare = () => {
+    if (!compareImages.length) return;
+    setCompareIndex((i) => (i + 1) % compareImages.length);
+  };
+  const prevCompare = () => {
+    if (!compareImages.length) return;
+    setCompareIndex((i) => (i - 1 + compareImages.length) % compareImages.length);
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <Fade in timeout={600}>
@@ -300,6 +348,7 @@ export default function TransformerInspectionsPage() {
                 </Typography>
               </Box>
 
+              {/* (Removed "View Details" button as requested) */}
               <Button variant="contained" startIcon={<Add />} onClick={() => setOpenDialog(true)}>
                 Create New Inspection
               </Button>
@@ -352,7 +401,7 @@ export default function TransformerInspectionsPage() {
                     <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }}>
                       <Stack direction="row" alignItems="center" spacing={2}>
                         <Avatar sx={{ bgcolor: "rgba(255,255,255,0.2)", width: 64, height: 64 }}>
-                          {getTransformerTypeInfo(transformer.transformerType)}
+                          {getTransformerTypeIcon(transformer.transformerType)}
                         </Avatar>
                         <Box>
                           <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
@@ -363,11 +412,7 @@ export default function TransformerInspectionsPage() {
                           </Typography>
                         </Box>
                       </Stack>
-                      <Button variant="outlined" startIcon={<Visibility />}
-                        onClick={() => navigate(`/transformers`)}
-                        sx={{ borderColor: "rgba(255,255,255,0.3)", color: "white", "&:hover": { borderColor: "rgba(255,255,255,0.5)", bgcolor: "rgba(255,255,255,0.1)" } }}>
-                        View Details
-                      </Button>
+                      {/* intentionally no button here */}
                     </Stack>
 
                     <Stack direction="row" spacing={2} flexWrap="wrap">
@@ -460,10 +505,22 @@ export default function TransformerInspectionsPage() {
                     <Table>
                       <TableHead sx={{ bgcolor: alpha(theme.palette.grey[500], 0.05) }}>
                         <TableRow>
-                          <TableCell sx={{ fontWeight: 600 }}><Stack direction="row" alignItems="center" spacing={1}><Assessment fontSize="small" />Title</Stack></TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}><Stack direction="row" alignItems="center" spacing={1}><Person fontSize="small" />Inspector</Stack></TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}><Stack direction="row" alignItems="center" spacing={1}><TrendingUp fontSize="small" />Status</Stack></TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}><Stack direction="row" alignItems="center" spacing={1}><CalendarToday fontSize="small" />Created</Stack></TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            <Stack direction="row" alignItems="center" spacing={1}><Assessment fontSize="small" />Title</Stack>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            <Stack direction="row" alignItems="center" spacing={1}><Person fontSize="small" />Inspector</Stack>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            <Stack direction="row" alignItems="center" spacing={1}><TrendingUp fontSize="small" />Status</Stack>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            <Stack direction="row" alignItems="center" spacing={1}><CalendarToday fontSize="small" />Created</Stack>
+                          </TableCell>
+                          {/* NEW: Compare column */}
+                          <TableCell sx={{ fontWeight: 600, textAlign: "right" }}>
+                            Compare
+                          </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -471,8 +528,9 @@ export default function TransformerInspectionsPage() {
                           const sc = getStatusColor(inspection.status);
                           return (
                             <TableRow key={inspection.id}
-                              onClick={() => openUploadFor(inspection)}
-                              sx={{ "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.04) }, cursor: "pointer" }}>
+                              hover
+                              sx={{ "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.04) } }}
+                            >
                               <TableCell>
                                 <Typography variant="body1" sx={{ fontWeight: 500 }}>{inspection.title}</Typography>
                                 {inspection.notes && (
@@ -502,6 +560,25 @@ export default function TransformerInspectionsPage() {
                                   <Typography variant="caption" color="text.secondary">
                                     {inspection.createdAt ? new Date(inspection.createdAt).toLocaleTimeString() : ""}
                                   </Typography>
+                                </Stack>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => openCompareFor(inspection)}
+                                    disabled={!baselineImage}
+                                  >
+                                    Compare
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={() => openUploadFor(inspection)}
+                                  >
+                                    Upload Image
+                                  </Button>
                                 </Stack>
                               </TableCell>
                             </TableRow>
@@ -557,7 +634,7 @@ export default function TransformerInspectionsPage() {
             </DialogActions>
           </Dialog>
 
-          {/* Upload MAINTENANCE Image Dialog (row click) */}
+          {/* Upload MAINTENANCE Image Dialog */}
           <Dialog open={openUpload} onClose={() => setOpenUpload(false)} fullWidth maxWidth="sm">
             <DialogTitle sx={{ pr: 7 }}>
               Upload Image {selectedInspection ? `– ${selectedInspection.title}` : ""}
@@ -715,6 +792,82 @@ export default function TransformerInspectionsPage() {
                 onClick={uploadBaseline} disabled={uploadingBaseline}>
                 {uploadingBaseline ? "Uploading..." : "Upload Baseline"}
               </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Compare Dialog: Baseline (left) vs Inspection images (right) */}
+          <Dialog open={openCompare} onClose={() => setOpenCompare(false)} fullWidth maxWidth="lg">
+            <DialogTitle sx={{ pr: 7 }}>
+              Compare Images {compareInspection ? `– ${compareInspection.title}` : ""}
+              <IconButton onClick={() => setOpenCompare(false)} sx={{ position: "absolute", right: 8, top: 8 }}>
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent dividers sx={{ p: 2 }}>
+              <Grid container spacing={2}>
+                {/* Baseline */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ height: "100%" }}>
+                    <CardHeader title="Baseline" />
+                    <CardContent sx={{
+                      p: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                      minHeight: 360, bgcolor: "grey.50"
+                    }}>
+                      {baselineImage ? (
+                        <Box component="img" src={rawUrl(baselineImage)} alt="Baseline"
+                          sx={{ maxWidth: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 1 }} />
+                      ) : (
+                        <Typography color="text.secondary">No baseline image available</Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Inspection images */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ height: "100%", position: "relative" }}>
+                    <CardHeader
+                      title="Inspection"
+                      subheader={
+                        compareImages.length
+                          ? `${compareIndex + 1} / ${compareImages.length}`
+                          : "No inspection images"
+                      }
+                    />
+                    <CardContent sx={{
+                      p: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                      minHeight: 360, bgcolor: "grey.50", position: "relative"
+                    }}>
+                      {compareImages.length ? (
+                        <>
+                          <IconButton
+                            onClick={prevCompare}
+                            sx={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", bgcolor: "white" }}
+                          >
+                            <ArrowBackIosNew />
+                          </IconButton>
+                          <Box component="img"
+                            src={rawUrl(compareImages[compareIndex])}
+                            alt={`Inspection-${compareInspection?.id}-${compareIndex}`}
+                            sx={{ maxWidth: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 1 }}
+                          />
+                          <IconButton
+                            onClick={nextCompare}
+                            sx={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", bgcolor: "white" }}
+                          >
+                            <ArrowForwardIos />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <Typography color="text.secondary">No images for this inspection</Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setOpenCompare(false)}>Close</Button>
             </DialogActions>
           </Dialog>
 
