@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import {
@@ -22,11 +22,13 @@ export default function TransformerInspectionsPage() {
   const navigate = useNavigate();
   const theme = useTheme();
 
+  // NOTE: if axiosClient.baseURL === "/api", keep this "/transformers"
+  // so `${apiBase}/${id}/baseline` resolves to /api/transformers/:id/baseline
   const apiBase = "/transformers";
 
   const [transformer, setTransformer] = useState(null);
   const [inspections, setInspections] = useState([]);
-  const [images, setImages] = useState([]);
+  const [images, setImages] = useState([]); // still used for baseline-callout (no images yet)
   const [loading, setLoading] = useState(false);
 
   // notifications
@@ -66,10 +68,11 @@ export default function TransformerInspectionsPage() {
   });
   const [uploadingBaseline, setUploadingBaseline] = useState(false);
 
-  // COMPARE dialog
+  // COMPARE dialog (now uses /baseline/base64 and /maintenance/base64)
   const [openCompare, setOpenCompare] = useState(false);
   const [compareInspection, setCompareInspection] = useState(null);
-  const [compareImages, setCompareImages] = useState([]); // inspection images
+  const [baselineForCompare, setBaselineForCompare] = useState(null); // latest baseline (base64 object)
+  const [compareImages, setCompareImages] = useState([]);             // maintenance images (base64 objects) for that inspection
   const [compareIndex, setCompareIndex] = useState(0);
 
   const handleBaselineFile = (f) => {
@@ -223,7 +226,6 @@ export default function TransformerInspectionsPage() {
       fd.append("meta", new Blob([JSON.stringify(meta)], { type: "application/json" }));
       fd.append("file", uploadFile);
 
-      // If you use /transformers/:id/inspections/:inspectionId/images, swap the next line accordingly.
       const uploadUrl = `${apiBase}/${id}/images`;
       await axiosClient.post(uploadUrl, fd, { headers: { "Content-Type": "multipart/form-data" } });
 
@@ -271,37 +273,49 @@ export default function TransformerInspectionsPage() {
 
   const noImagesYet = (images?.length || 0) === 0;
 
-  // ---- Compare helpers ----
-  const baselineImage = useMemo(() => {
-    const baselines = (images || []).filter((img) => img.imageType === "BASELINE");
-    if (!baselines.length) return null;
-    // pick the latest by createdAt (fallback to first)
-    return baselines.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
-  }, [images]);
-
-  const rawUrl = (img) => `${apiBase}/images/${img.id}/raw`;
-
+  // ---- Compare (now using /baseline/base64 and /maintenance/base64) ----
   const openCompareFor = async (inspection) => {
     setCompareInspection(inspection);
-    setCompareImages([]);
-    setCompareIndex(0);
     setOpenCompare(true);
 
-    // Try to find images for this inspection from the global images list
-    let imgs = (images || []).filter(
-      (im) => im.imageType === "MAINTENANCE" && (im.inspectionId === inspection.id)
-    );
+    setBaselineForCompare(null);
+    setCompareImages([]);
+    setCompareIndex(0);
 
-    // Fallback: fetch from dedicated endpoint if not found on list
-    if (!imgs.length) {
-      try {
-        const res = await axiosClient.get(`${apiBase}/${id}/inspections/${inspection.id}/images`);
-        imgs = res.data || [];
-      } catch {
-        // ignore; we'll show empty state
-      }
+    try {
+      const [baselineRes, maintRes] = await Promise.all([
+        axiosClient.get(`${apiBase}/${id}/baseline/base64`),
+        axiosClient.get(`${apiBase}/${id}/maintenance/base64`),
+      ]);
+
+      // Handle response shapes defensively (prefer arrays)
+      const baselines = Array.isArray(baselineRes.data)
+        ? baselineRes.data
+        : Array.isArray(baselineRes.data?.images)
+          ? baselineRes.data.images
+          : [];
+      const latestBaseline = baselines
+        .slice()
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] || null;
+      setBaselineForCompare(latestBaseline || null);
+
+      const allMaint = Array.isArray(maintRes.data)
+        ? maintRes.data
+        : Array.isArray(maintRes.data?.images)
+          ? maintRes.data.images
+          : [];
+
+      // Filter by inspectionId if available; otherwise show all for this transformer
+      const thisInspectionImgs = allMaint.filter((im) =>
+        im.inspectionId ? im.inspectionId === inspection.id : true
+      );
+
+      setCompareImages(thisInspectionImgs);
+    } catch (err) {
+      setBaselineForCompare(null);
+      setCompareImages([]);
+      toast("Failed to load comparison images", "error");
     }
-    setCompareImages(imgs);
   };
 
   const nextCompare = () => {
@@ -348,7 +362,6 @@ export default function TransformerInspectionsPage() {
                 </Typography>
               </Box>
 
-              {/* (Removed "View Details" button as requested) */}
               <Button variant="contained" startIcon={<Add />} onClick={() => setOpenDialog(true)}>
                 Create New Inspection
               </Button>
@@ -412,7 +425,6 @@ export default function TransformerInspectionsPage() {
                           </Typography>
                         </Box>
                       </Stack>
-                      {/* intentionally no button here */}
                     </Stack>
 
                     <Stack direction="row" spacing={2} flexWrap="wrap">
@@ -517,7 +529,6 @@ export default function TransformerInspectionsPage() {
                           <TableCell sx={{ fontWeight: 600 }}>
                             <Stack direction="row" alignItems="center" spacing={1}><CalendarToday fontSize="small" />Created</Stack>
                           </TableCell>
-                          {/* NEW: Compare column */}
                           <TableCell sx={{ fontWeight: 600, textAlign: "right" }}>
                             Compare
                           </TableCell>
@@ -568,7 +579,6 @@ export default function TransformerInspectionsPage() {
                                     size="small"
                                     variant="outlined"
                                     onClick={() => openCompareFor(inspection)}
-                                    disabled={!baselineImage}
                                   >
                                     Compare
                                   </Button>
@@ -813,8 +823,8 @@ export default function TransformerInspectionsPage() {
                       p: 1, display: "flex", alignItems: "center", justifyContent: "center",
                       minHeight: 360, bgcolor: "grey.50"
                     }}>
-                      {baselineImage ? (
-                        <Box component="img" src={rawUrl(baselineImage)} alt="Baseline"
+                      {baselineForCompare?.data ? (
+                        <Box component="img" src={baselineForCompare.data} alt="Baseline"
                           sx={{ maxWidth: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 1 }} />
                       ) : (
                         <Typography color="text.secondary">No baseline image available</Typography>
@@ -838,7 +848,7 @@ export default function TransformerInspectionsPage() {
                       p: 1, display: "flex", alignItems: "center", justifyContent: "center",
                       minHeight: 360, bgcolor: "grey.50", position: "relative"
                     }}>
-                      {compareImages.length ? (
+                      {compareImages.length && compareImages[compareIndex]?.data ? (
                         <>
                           <IconButton
                             onClick={prevCompare}
@@ -846,8 +856,9 @@ export default function TransformerInspectionsPage() {
                           >
                             <ArrowBackIosNew />
                           </IconButton>
-                          <Box component="img"
-                            src={rawUrl(compareImages[compareIndex])}
+                          <Box
+                            component="img"
+                            src={compareImages[compareIndex].data}
                             alt={`Inspection-${compareInspection?.id}-${compareIndex}`}
                             sx={{ maxWidth: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 1 }}
                           />
