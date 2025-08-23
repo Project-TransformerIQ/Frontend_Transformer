@@ -19,7 +19,6 @@ import {
   Snackbar, 
   Alert,
   Container,
-  Paper,
   Stack,
   Avatar,
   Breadcrumbs,
@@ -37,7 +36,7 @@ import {
   DialogActions,
   CardHeader,
   useTheme,
-  alpha
+  alpha,
 } from "@mui/material";
 import {
   ArrowBack,
@@ -58,7 +57,9 @@ import {
   Warning,
   Visibility,
   Search,
-  Analytics
+  Analytics,
+  CloudUpload,
+  Image as ImageIcon,
 } from "@mui/icons-material";
 
 export default function TransformerInspectionsPage() {
@@ -74,12 +75,13 @@ export default function TransformerInspectionsPage() {
 
   // notifications
   const [snack, setSnack] = useState({ open: false, msg: "", sev: "success" });
+  const toast = (msg, sev = "success") => setSnack({ open: true, msg, sev });
 
   // filters
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  // form + dialog
+  // create dialog
   const [openDialog, setOpenDialog] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [form, setForm] = useState({
@@ -91,7 +93,13 @@ export default function TransformerInspectionsPage() {
   const [formErrors, setFormErrors] = useState({});
   const [touched, setTouched] = useState({});
 
-  const toast = (msg, sev = "success") => setSnack({ open: true, msg, sev });
+  // --- NEW: upload dialog state ---
+  const [openUpload, setOpenUpload] = useState(false);
+  const [selectedInspection, setSelectedInspection] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const load = async () => {
     try {
@@ -111,7 +119,7 @@ export default function TransformerInspectionsPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
 
-  // validation
+  // validation for create dialog
   const validateField = (name, value) => {
     switch (name) {
       case "title":
@@ -125,7 +133,6 @@ export default function TransformerInspectionsPage() {
         return "";
     }
   };
-
   const handleFieldChange = (name, value) => {
     setForm((f) => ({ ...f, [name]: value }));
     if (touched[name]) {
@@ -133,13 +140,11 @@ export default function TransformerInspectionsPage() {
       setFormErrors((fe) => ({ ...fe, [name]: error }));
     }
   };
-
   const handleFieldBlur = (name) => {
     setTouched((t) => ({ ...t, [name]: true }));
     const error = validateField(name, form[name]);
     setFormErrors((fe) => ({ ...fe, [name]: error }));
   };
-
   const isFormValid = () => {
     const newErrors = {};
     ["title", "inspector"].forEach((field) => {
@@ -149,19 +154,16 @@ export default function TransformerInspectionsPage() {
     setFormErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
   const resetForm = () => {
     setForm({ title: "", inspector: "", notes: "", status: "OPEN" });
     setFormErrors({});
     setTouched({});
   };
-
   const addInspection = async () => {
     if (!isFormValid()) {
       setTouched({ title: true, inspector: true });
       return false;
     }
-
     try {
       setFormLoading(true);
       await axiosClient.post(`${apiBase}/${id}/inspections`, {
@@ -170,7 +172,6 @@ export default function TransformerInspectionsPage() {
         notes: form.notes?.trim() || undefined,
         status: form.status,
       });
-
       toast("Inspection added successfully");
       resetForm();
       await load();
@@ -183,7 +184,7 @@ export default function TransformerInspectionsPage() {
     }
   };
 
-  // filtering
+  // filters & stats
   const filteredInspections = inspections.filter((inspection) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
@@ -191,14 +192,10 @@ export default function TransformerInspectionsPage() {
       inspection.title?.toLowerCase().includes(q) ||
       inspection.inspector?.toLowerCase().includes(q) ||
       inspection.notes?.toLowerCase().includes(q);
-
     const matchesStatus =
       statusFilter === "ALL" || inspection.status === statusFilter;
-
     return matchesSearch && matchesStatus;
   });
-
-  // stats
   const stats = {
     total: inspections.length,
     open: inspections.filter((i) => i.status === "OPEN").length,
@@ -218,26 +215,76 @@ export default function TransformerInspectionsPage() {
         return { color: "default", bgColor: alpha(theme.palette.grey[500], 0.1) };
     }
   };
-
   const getStatusIcon = (status) => {
     switch (status) {
-      case "OPEN":
-        return <Schedule fontSize="small" />;
-      case "IN_PROGRESS":
-        return <Engineering fontSize="small" />;
-      case "CLOSED":
-        return <CheckCircle fontSize="small" />;
-      default:
-        return <Warning fontSize="small" />;
+      case "OPEN": return <Schedule fontSize="small" />;
+      case "IN_PROGRESS": return <Engineering fontSize="small" />;
+      case "CLOSED": return <CheckCircle fontSize="small" />;
+      default: return <Warning fontSize="small" />;
     }
   };
-
   const getTransformerTypeInfo = (type) => {
     const typeInfo = {
       BULK: { color: "#4caf50", icon: <Business /> },
       DISTRIBUTION: { color: "#ff9800", icon: <Engineering /> },
     };
     return typeInfo[type] || { color: "#757575", icon: <PowerInput /> };
+  };
+
+  // --- NEW: upload helpers ---
+  const openUploadFor = (inspection) => {
+    setSelectedInspection(inspection);
+    setUploadFile(null);
+    setPreview(null);
+    setOpenUpload(true);
+  };
+  const handleFileSelect = (file) => {
+    setUploadFile(file || null);
+    if (file) {
+      const r = new FileReader();
+      r.onload = (e) => setPreview(e.target.result);
+      r.readAsDataURL(file);
+    } else {
+      setPreview(null);
+    }
+  };
+  const uploadImage = async () => {
+    if (!uploadFile || !selectedInspection) {
+      toast("Please select an image", "error");
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+
+      // Reuse your existing meta shape; tag the inspection id.
+      const meta = {
+        imageType: "MAINTENANCE",
+        uploader: selectedInspection.inspector || "Unknown",
+        inspectionId: selectedInspection.id, // backend can use this to link
+      };
+
+      formData.append("meta", new Blob([JSON.stringify(meta)], { type: "application/json" }));
+      formData.append("file", uploadFile);
+
+      // If your API is /transformers/:id/inspections/:inspectionId/images,
+      // replace the next line with:
+      // const uploadUrl = `${apiBase}/${id}/inspections/${selectedInspection.id}/images`;
+      const uploadUrl = `${apiBase}/${id}/images`;
+
+      await axiosClient.post(uploadUrl, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast("Image uploaded");
+      setOpenUpload(false);
+      setUploadFile(null);
+      setPreview(null);
+    } catch (e) {
+      toast(e?.response?.data?.error || "Failed to upload image", "error");
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -250,7 +297,7 @@ export default function TransformerInspectionsPage() {
               <Link
                 component="button"
                 variant="body1"
-                onClick={() => navigate("/")}
+                onClick={() => navigate("/")}  // home
                 sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
               >
                 <ElectricalServices fontSize="small" />
@@ -263,9 +310,9 @@ export default function TransformerInspectionsPage() {
             </Breadcrumbs>
 
             <Stack direction="row" alignItems="center" spacing={2}>
-              <Tooltip title="Back to Transformers">
+              <Tooltip title="Back to Home">
                 <IconButton
-                  onClick={() => navigate("/transformers")}
+                  onClick={() => navigate("/")}
                   sx={{
                     bgcolor: alpha(theme.palette.primary.main, 0.1),
                     "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.2) },
@@ -285,11 +332,7 @@ export default function TransformerInspectionsPage() {
               </Box>
 
               {/* Create button opens dialog */}
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => setOpenDialog(true)}
-              >
+              <Button variant="contained" startIcon={<Add />} onClick={() => setOpenDialog(true)}>
                 Create New Inspection
               </Button>
             </Stack>
@@ -304,23 +347,16 @@ export default function TransformerInspectionsPage() {
                 boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
                 background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                 color: "white",
-                position: "relative",
                 overflow: "hidden",
               }}
             >
-              <CardContent sx={{ p: 4, position: "relative", zIndex: 1 }}>
+              <CardContent sx={{ p: 4 }}>
                 {loading ? (
                   <Stack spacing={2}>
                     <Skeleton variant="text" width="30%" height={32} sx={{ bgcolor: "rgba(255,255,255,0.2)" }} />
                     <Stack direction="row" spacing={1}>
                       {[1, 2, 3, 4].map((i) => (
-                        <Skeleton
-                          key={i}
-                          variant="rounded"
-                          width={120}
-                          height={32}
-                          sx={{ bgcolor: "rgba(255,255,255,0.2)" }}
-                        />
+                        <Skeleton key={i} variant="rounded" width={120} height={32} sx={{ bgcolor: "rgba(255,255,255,0.2)" }} />
                       ))}
                     </Stack>
                   </Stack>
@@ -377,29 +413,17 @@ export default function TransformerInspectionsPage() {
                       <Chip
                         icon={<LocationOn fontSize="small" />}
                         label={`Pole: ${transformer.poleNo || "Not specified"}`}
-                        sx={{
-                          bgcolor: "rgba(255,255,255,0.2)",
-                          color: "white",
-                          backdropFilter: "blur(10px)",
-                        }}
+                        sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white", backdropFilter: "blur(10px)" }}
                       />
                       <Chip
                         icon={<Business fontSize="small" />}
                         label={`Region: ${transformer.region || "Not specified"}`}
-                        sx={{
-                          bgcolor: "rgba(255,255,255,0.2)",
-                          color: "white",
-                          backdropFilter: "blur(10px)",
-                        }}
+                        sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white", backdropFilter: "blur(10px)" }}
                       />
                       <Chip
                         icon={<PowerInput fontSize="small" />}
                         label={`Type: ${transformer.transformerType || "Not specified"}`}
-                        sx={{
-                          bgcolor: "rgba(255,255,255,0.2)",
-                          color: "white",
-                          backdropFilter: "blur(10px)",
-                        }}
+                        sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white", backdropFilter: "blur(10px)" }}
                       />
                     </Stack>
                   </Stack>
@@ -450,13 +474,7 @@ export default function TransformerInspectionsPage() {
 
           {/* Inspections List */}
           <Grow in timeout={1400}>
-            <Card
-              sx={{
-                borderRadius: 3,
-                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-                width: "100%",
-              }}
-            >
+            <Card sx={{ borderRadius: 3, boxShadow: "0 8px 32px rgba(0,0,0,0.12)", width: "100%" }}>
               <CardHeader
                 avatar={
                   <Badge badgeContent={inspections.length} color="primary">
@@ -465,11 +483,7 @@ export default function TransformerInspectionsPage() {
                     </Avatar>
                   </Badge>
                 }
-                title={
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Inspection Records
-                  </Typography>
-                }
+                title={<Typography variant="h6" sx={{ fontWeight: 600 }}>Inspection Records</Typography>}
                 subheader={`${filteredInspections.length} of ${inspections.length} inspections`}
                 action={
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -478,9 +492,7 @@ export default function TransformerInspectionsPage() {
                       placeholder="Search inspections..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      InputProps={{
-                        startAdornment: <Search sx={{ color: "action.active" }} />,
-                      }}
+                      InputProps={{ startAdornment: <Search sx={{ color: "action.active" }} /> }}
                       sx={{ minWidth: 200 }}
                     />
                     <TextField
@@ -497,10 +509,7 @@ export default function TransformerInspectionsPage() {
                     </TextField>
                   </Stack>
                 }
-                sx={{
-                  bgcolor: alpha(theme.palette.secondary.main, 0.05),
-                  borderBottom: `1px solid ${alpha(theme.palette.secondary.main, 0.1)}`,
-                }}
+                sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.05), borderBottom: `1px solid ${alpha(theme.palette.secondary.main, 0.1)}` }}
               />
 
               <CardContent sx={{ p: 0 }}>
@@ -512,34 +521,15 @@ export default function TransformerInspectionsPage() {
                     </Typography>
                   </Box>
                 ) : filteredInspections.length === 0 ? (
-                  <Box
-                    sx={{
-                      p: 8,
-                      textAlign: "center",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 2,
-                    }}
-                  >
-                    <Avatar
-                      sx={{
-                        width: 64,
-                        height: 64,
-                        bgcolor: alpha(theme.palette.text.secondary, 0.1),
-                      }}
-                    >
+                  <Box sx={{ p: 8, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                    <Avatar sx={{ width: 64, height: 64, bgcolor: alpha(theme.palette.text.secondary, 0.1) }}>
                       <Assessment sx={{ fontSize: 32, color: "text.secondary" }} />
                     </Avatar>
                     <Typography variant="h6" color="text.secondary">
-                      {searchTerm || statusFilter !== "ALL"
-                        ? "No inspections match your criteria"
-                        : "No inspections recorded yet"}
+                      {searchTerm || statusFilter !== "ALL" ? "No inspections match your criteria" : "No inspections recorded yet"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {searchTerm || statusFilter !== "ALL"
-                        ? "Try adjusting your search or filter settings"
-                        : "Use the button above to create your first inspection"}
+                      {searchTerm || statusFilter !== "ALL" ? "Try adjusting your search or filter settings" : "Use the button above to create your first inspection"}
                     </Typography>
                   </Box>
                 ) : (
@@ -549,26 +539,22 @@ export default function TransformerInspectionsPage() {
                         <TableRow>
                           <TableCell sx={{ fontWeight: 600 }}>
                             <Stack direction="row" alignItems="center" spacing={1}>
-                              <Assessment fontSize="small" />
-                              Title
+                              <Assessment fontSize="small" /> Title
                             </Stack>
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>
                             <Stack direction="row" alignItems="center" spacing={1}>
-                              <Person fontSize="small" />
-                              Inspector
+                              <Person fontSize="small" /> Inspector
                             </Stack>
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>
                             <Stack direction="row" alignItems="center" spacing={1}>
-                              <TrendingUp fontSize="small" />
-                              Status
+                              <TrendingUp fontSize="small" /> Status
                             </Stack>
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>
                             <Stack direction="row" alignItems="center" spacing={1}>
-                              <CalendarToday fontSize="small" />
-                              Created
+                              <CalendarToday fontSize="small" /> Created
                             </Stack>
                           </TableCell>
                         </TableRow>
@@ -579,13 +565,11 @@ export default function TransformerInspectionsPage() {
                           return (
                             <Fade key={inspection.id} in timeout={200 + index * 100}>
                               <TableRow
+                                onClick={() => openUploadFor(inspection)}
                                 sx={{
-                                  "&:hover": {
-                                    bgcolor: alpha(theme.palette.primary.main, 0.04),
-                                    transform: "scale(1.01)",
-                                  },
-                                  transition: "all 0.2s ease",
-                                  cursor: "default",
+                                  "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                                  transition: "background-color 0.2s ease",
+                                  cursor: "pointer",
                                 }}
                               >
                                 <TableCell>
@@ -614,9 +598,7 @@ export default function TransformerInspectionsPage() {
                                     <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
                                       {inspection.inspector?.charAt(0)?.toUpperCase() || "?"}
                                     </Avatar>
-                                    <Typography variant="body2">
-                                      {inspection.inspector || "Unknown"}
-                                    </Typography>
+                                    <Typography variant="body2">{inspection.inspector || "Unknown"}</Typography>
                                   </Stack>
                                 </TableCell>
                                 <TableCell>
@@ -631,14 +613,10 @@ export default function TransformerInspectionsPage() {
                                 <TableCell>
                                   <Stack spacing={0.5}>
                                     <Typography variant="body2">
-                                      {inspection.createdAt
-                                        ? new Date(inspection.createdAt).toLocaleDateString()
-                                        : "Unknown"}
+                                      {inspection.createdAt ? new Date(inspection.createdAt).toLocaleDateString() : "Unknown"}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                      {inspection.createdAt
-                                        ? new Date(inspection.createdAt).toLocaleTimeString()
-                                        : ""}
+                                      {inspection.createdAt ? new Date(inspection.createdAt).toLocaleTimeString() : ""}
                                     </Typography>
                                   </Stack>
                                 </TableCell>
@@ -658,14 +636,12 @@ export default function TransformerInspectionsPage() {
           <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth maxWidth="sm">
             <DialogTitle sx={{ pr: 7 }}>
               Create New Inspection
-              <IconButton
-                onClick={() => setOpenDialog(false)}
-                sx={{ position: "absolute", right: 8, top: 8 }}
-              >
+              <IconButton onClick={() => setOpenDialog(false)} sx={{ position: "absolute", right: 8, top: 8 }}>
                 <CloseIcon />
               </IconButton>
             </DialogTitle>
 
+            {/* Stacked, line-by-line form */}
             <DialogContent dividers>
               <Stack spacing={3}>
                 <TextField
@@ -677,11 +653,8 @@ export default function TransformerInspectionsPage() {
                   error={!!formErrors.title}
                   helperText={formErrors.title || "Enter a descriptive title"}
                   required
-                  InputProps={{
-                    startAdornment: <Assessment sx={{ color: "action.active", mr: 1 }} />,
-                  }}
+                  InputProps={{ startAdornment: <Assessment sx={{ color: "action.active", mr: 1 }} /> }}
                 />
-
                 <TextField
                   label="Inspector Name"
                   fullWidth
@@ -691,11 +664,8 @@ export default function TransformerInspectionsPage() {
                   error={!!formErrors.inspector}
                   helperText={formErrors.inspector || "Who is conducting the inspection?"}
                   required
-                  InputProps={{
-                    startAdornment: <Person sx={{ color: "action.active", mr: 1 }} />,
-                  }}
+                  InputProps={{ startAdornment: <Person sx={{ color: "action.active", mr: 1 }} /> }}
                 />
-
                 <TextField
                   select
                   label="Status"
@@ -703,26 +673,10 @@ export default function TransformerInspectionsPage() {
                   value={form.status}
                   onChange={(e) => handleFieldChange("status", e.target.value)}
                 >
-                  <MenuItem value="OPEN">
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Schedule fontSize="small" color="info" />
-                      <Typography>Open</Typography>
-                    </Stack>
-                  </MenuItem>
-                  <MenuItem value="IN_PROGRESS">
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Engineering fontSize="small" color="warning" />
-                      <Typography>In Progress</Typography>
-                    </Stack>
-                  </MenuItem>
-                  <MenuItem value="CLOSED">
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <CheckCircle fontSize="small" color="success" />
-                      <Typography>Closed</Typography>
-                    </Stack>
-                  </MenuItem>
+                  <MenuItem value="OPEN">Open</MenuItem>
+                  <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
+                  <MenuItem value="CLOSED">Closed</MenuItem>
                 </TextField>
-
                 <TextField
                   label="Inspection Notes"
                   fullWidth
@@ -732,14 +686,11 @@ export default function TransformerInspectionsPage() {
                   onChange={(e) => handleFieldChange("notes", e.target.value)}
                   placeholder="Add detailed notes about the inspection findings..."
                   InputProps={{
-                    startAdornment: (
-                      <Notes sx={{ color: "action.active", mr: 1, alignSelf: "flex-start", mt: 1 }} />
-                    ),
+                    startAdornment: <Notes sx={{ color: "action.active", mr: 1, alignSelf: "flex-start", mt: 1 }} />,
                   }}
                 />
               </Stack>
             </DialogContent>
-
 
             <DialogActions sx={{ px: 3, py: 1.5 }}>
               <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
@@ -757,6 +708,106 @@ export default function TransformerInspectionsPage() {
             </DialogActions>
           </Dialog>
 
+          {/* Upload Image Dialog (opens when row is clicked) */}
+          <Dialog open={openUpload} onClose={() => setOpenUpload(false)} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ pr: 7 }}>
+              Upload Image {selectedInspection ? `– ${selectedInspection.title}` : ""}
+              <IconButton onClick={() => setOpenUpload(false)} sx={{ position: "absolute", right: 8, top: 8 }}>
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+
+            <DialogContent dividers>
+              <Box
+                sx={{
+                  border: 2,
+                  borderStyle: "dashed",
+                  borderColor: dragOver ? "primary.main" : "grey.300",
+                  bgcolor: dragOver ? "primary.50" : "grey.50",
+                  p: 3,
+                  textAlign: "center",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  borderRadius: 2,
+                }}
+                onClick={() => document.getElementById("inspection-file-input")?.click()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (f && f.type.startsWith("image/")) handleFileSelect(f);
+                  else toast("Please select a valid image", "error");
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+              >
+                {preview ? (
+                  <Box>
+                    <Box
+                      component="img"
+                      src={preview}
+                      alt="Preview"
+                      sx={{ width: "100%", height: "auto", maxHeight: 320, borderRadius: 1, objectFit: "contain" }}
+                    />
+                    <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
+                      {uploadFile?.name} ({uploadFile ? (uploadFile.size / 1024 / 1024).toFixed(2) : 0} MB)
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{ mt: 1 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUploadFile(null);
+                        setPreview(null);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </Box>
+                ) : (
+                  <Box>
+                    <Avatar sx={{ bgcolor: "primary.main", mx: "auto", mb: 2 }}>
+                      <ImageIcon />
+                    </Avatar>
+                    <Typography variant="h6" gutterBottom>
+                      Drop image here
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" paragraph>
+                      or click to browse files
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Supported: JPG, PNG, GIF
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+
+              <input
+                id="inspection-file-input"
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => handleFileSelect(e.target.files?.[0])}
+              />
+            </DialogContent>
+
+            <DialogActions sx={{ px: 3, py: 1.5 }}>
+              <Button onClick={() => setOpenUpload(false)}>Cancel</Button>
+              <Button
+                variant="contained"
+                startIcon={<CloudUpload />}
+                onClick={uploadImage}
+                disabled={uploading || !uploadFile}
+              >
+                {uploading ? "Uploading..." : "Upload Image"}
+              </Button>
+            </DialogActions>
+          </Dialog>
+
           {/* Snackbar */}
           <Snackbar
             open={snack.open}
@@ -764,12 +815,7 @@ export default function TransformerInspectionsPage() {
             onClose={() => setSnack({ ...snack, open: false })}
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           >
-            <Alert
-              onClose={() => setSnack({ ...snack, open: false })}
-              severity={snack.sev}
-              variant="filled"
-              sx={{ borderRadius: 2 }}
-            >
+            <Alert onClose={() => setSnack({ ...snack, open: false })} severity={snack.sev} variant="filled" sx={{ borderRadius: 2 }}>
               {snack.msg}
             </Alert>
           </Snackbar>
