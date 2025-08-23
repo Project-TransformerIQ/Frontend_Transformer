@@ -1,496 +1,561 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import ImagePreviewDialog from "../pages/ImagePreviewDialog";
 
-import axiosClient from "../api/axiosClient";
 import {
-  Button,
+  getTransformers,
+  createTransformer,
+  updateTransformer,
+  deleteTransformer,
+  getImages,
+  buildImageRawUrl
+} from "../services/transformerService";
+
+import {
+  Box, 
+  Paper, 
+  Typography, 
+  Button, 
+  Snackbar, 
+  Alert, 
+  LinearProgress, 
+  Stack,
+  Container,
+  Fade,
+  Grow,
   TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Paper,
-  Box,
-  Typography,
+  InputAdornment,
   Card,
   CardContent,
-  IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
+  Divider,
   Chip,
-  Grid,
-  Alert,
-  Snackbar,
-  LinearProgress
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText
 } from "@mui/material";
-import {
-  Add,
-  Delete,
-  Edit,
-  ElectricalServices,
-  LocationOn,
-  PowerInput,
-  Image as ImageIcon
+import { 
+  Add, 
+  ElectricalServices, 
+  Search,
+  FilterList,
+  GridView,
+  ViewList,
+  Refresh,
+  Analytics
 } from "@mui/icons-material";
+
+import TransformerFormDialog from "../components/TransformerFormDialog";
+import TransformerTable from "../components/TransformerTable";
+import EmptyState from "../components/EmptyState";
+import ImagePreviewDialog from "../pages/ImagePreviewDialog";
 
 export default function TransformersPage() {
   const [transformers, setTransformers] = useState([]);
+  const [filteredTransformers, setFilteredTransformers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState("All");
+  const [selectedType, setSelectedType] = useState("All");
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [mode, setMode] = useState("create");
+  const [editingId, setEditingId] = useState(null);
+  const [initialForm, setInitialForm] = useState({ transformerNo: "", poleNo: "", region: "", transformerType: "" });
+
+  // Delete confirmation dialog
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, transformer: null });
+
+  // Images viewer
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const [imagesLoading, setImagesLoading] = useState(false);
+  const [images, setImages] = useState([]);
+  const [viewT, setViewT] = useState(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
+
   const navigate = useNavigate();
-  //const [form, setForm] = useState({ name: "", site: "", ratingKva: "" });
-  const [form, setForm] = useState({transformerNo: "", poleNo: "", region: "",transformerType: "" });
+
   const REGION_OPTIONS = ["Colombo", "Gampaha", "Kandy", "Galle", "Jaffna"];
   const TYPE_OPTIONS = ["BULK", "DISTRIBUTION"];
 
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, transformer: null });
-  const [editMode, setEditMode] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-  const [loading, setLoading] = useState(false);
+  const showSnackbar = (message, severity = "success") =>
+    setSnackbar({ open: true, message, severity });
 
-  // Images viewer state
-  const [imagesOpen, setImagesOpen] = useState(false);
-  const [images, setImages] = useState([]);
-  const [viewT, setViewT] = useState(null);
-  const [imagesLoading, setImagesLoading] = useState(false);
-
-  // new:
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewIndex, setPreviewIndex] = useState(0);
-
-  // API paths
-  const apiBase = "/transformers"; // keep using axiosClient baseURL for XHRs
-
-  // use the same base as axios for <img> requests too
-  const apiPrefix = (axiosClient.defaults.baseURL || "/api").replace(/\/$/, "");
-  const imageRawUrl = (imageId) => `${apiPrefix}${apiBase}/images/${imageId}/raw`;
-
-  // use the same base as axios for <img> requests too
-
-
-  
-
-
-  const load = async () => {
+  const load = async (showLoading = true) => {
     try {
-      setLoading(true);
-      const res = await axiosClient.get(apiBase);
-      setTransformers(res.data);
-    } catch (error) {
-      showSnackbar(error?.response?.data?.error || "Failed to load transformers", "error");
+      if (showLoading) setLoading(true);
+      const res = await getTransformers();
+      setTransformers(res.data || []);
+      setFilteredTransformers(res.data || []);
+    } catch (err) {
+      showSnackbar(err?.response?.data?.error || "Failed to load transformers", "error");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
+
+  // Filter transformers based on search and filters
+  useEffect(() => {
+    let filtered = transformers;
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(t => 
+        t.transformerNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.poleNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.region?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.transformerType?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Region filter
+    if (selectedRegion !== "All") {
+      filtered = filtered.filter(t => t.region === selectedRegion);
+    }
+
+    // Type filter
+    if (selectedType !== "All") {
+      filtered = filtered.filter(t => t.transformerType === selectedType);
+    }
+
+    setFilteredTransformers(filtered);
+  }, [searchTerm, selectedRegion, selectedType, transformers]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const showSnackbar = (message, severity = "success") => {
-    setSnackbar({ open: true, message, severity });
+  // --- Form Dialog handlers ---
+  const openCreate = () => {
+    setMode("create");
+    setEditingId(null);
+    setInitialForm({ transformerNo: "", poleNo: "", region: "", transformerType: "" });
+    setFormDialogOpen(true);
   };
 
- const create = async () => {
-  const { transformerNo, poleNo, region, transformerType } = form;
-  if (!transformerNo.trim() || !poleNo.trim() || !region || !transformerType) {
-    showSnackbar("Please fill in all fields", "error");
-    return;
-  }
-
-  const payload = {
-    transformerNo: transformerNo.trim(),
-    poleNo: poleNo.trim(),
-    region,                 // string from options
-    transformerType                    // "BULK" | "DISTRIBUTION"
+  const openEdit = (t) => {
+    setMode("edit");
+    setEditingId(t.id);
+    setInitialForm({
+      transformerNo: t.transformerNo || "",
+      poleNo: t.poleNo || "",
+      region: t.region || "",
+      transformerType: t.transformerType || ""
+    });
+    setFormDialogOpen(true);
   };
 
-  try {
-    if (editMode) {
-      await axiosClient.put(`${apiBase}/${editingId}`, payload);
-      showSnackbar("Transformer updated successfully");
-      setEditMode(false);
-      setEditingId(null);
-    } else {
-      await axiosClient.post(apiBase, payload);
-      showSnackbar("Transformer created successfully");
-    }
-    setForm({ transformerNo: "", poleNo: "", region: "", transformerType: "" });
-    load();
-  } catch (error) {
-    showSnackbar(error?.response?.data?.error || "Failed to save transformer", "error");
-  }
-};
-
-
-const startEdit = (t) => {
-  setForm({
-    transformerNo: t.transformerNo || "",
-    poleNo: t.poleNo || "",
-    region: t.region || "",
-    transformerType: t.transformerType || ""
-  });
-  setEditMode(true);
-  setEditingId(t.id);
-};
-
-const cancelEdit = () => {
-  setForm({ transformerNo: "", poleNo: "", region: "", transformerType: "" });
-  setEditMode(false);
-  setEditingId(null);
-};
-
-  const confirmDelete = (transformer) => {
-    setDeleteDialog({ open: true, transformer });
-  };
-
-  const remove = async () => {
+  const submitForm = async (payload) => {
     try {
-      await axiosClient.delete(`${apiBase}/${deleteDialog.transformer.id}`);
-      showSnackbar("Transformer deleted successfully");
-      load();
-    } catch (error) {
-      showSnackbar(error?.response?.data?.error || "Failed to delete transformer", "error");
+      if (mode === "edit" && editingId) {
+        await updateTransformer(editingId, payload);
+        showSnackbar("Transformer updated successfully");
+      } else {
+        await createTransformer(payload);
+        showSnackbar("Transformer created successfully");
+      }
+      setFormDialogOpen(false);
+      setEditingId(null);
+      load(false); // Refresh without showing loading
+    } catch (err) {
+      showSnackbar(err?.response?.data?.error || "Failed to save transformer", "error");
     }
-    setDeleteDialog({ open: false, transformer: null });
   };
 
-  // ----- Images viewer -----
-//  const openImages = async (t) => {
-//    setViewT(t);
-//    setImages([]);
-//    setImagesOpen(true);
-//    setImagesLoading(true);
-//    try {
-//      const res = await axiosClient.get(`${apiBase}/${t.id}/images`);
-//      setImages(res.data);
-//    } catch (e) {
-//      showSnackbar(e?.response?.data?.error || "Failed to load images", "error");
-//    } finally {
-//      setImagesLoading(false);
-//    }
-//  };
+  const handleDeleteClick = (t) => {
+    setDeleteDialog({ open: true, transformer: t });
+  };
 
-  
+  const confirmDelete = async () => {
+    try {
+      await deleteTransformer(deleteDialog.transformer.id);
+      showSnackbar("Transformer deleted successfully");
+      setDeleteDialog({ open: false, transformer: null });
+      load(false); // Refresh without showing loading
+    } catch (err) {
+      showSnackbar(err?.response?.data?.error || "Failed to delete transformer", "error");
+    }
+  };
+
+  // --- Images Viewer ---
+  const openImages = async (t) => {
+    setViewT(t);
+    setImages([]);
+    setImagesOpen(true);
+    setImagesLoading(true);
+    try {
+      const res = await getImages(t.id);
+      setImages(res.data || []);
+    } catch (e) {
+      showSnackbar(e?.response?.data?.error || "Failed to load images", "error");
+    } finally {
+      setImagesLoading(false);
+    }
+  };
+
+  // Statistics
+  const stats = {
+    total: transformers.length,
+    bulk: transformers.filter(t => t.transformerType === "BULK").length,
+    distribution: transformers.filter(t => t.transformerType === "DISTRIBUTION").length,
+    regions: [...new Set(transformers.map(t => t.region).filter(Boolean))].length
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSelectedRegion("All");
+    setSelectedType("All");
+  };
 
   return (
-    <Box sx={{ p: 2 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ color: '#1976d2', fontWeight: 600 }}>
-          <ElectricalServices sx={{ mr: 2, verticalAlign: 'middle' }} />
-          Transformer Management
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Manage your electrical transformers and their thermal inspection data
-        </Typography>
-      </Box>
-
-      {/* Add/Edit Form */}
-      <Card sx={{ mb: 3, boxShadow: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom sx={{ color: editMode ? '#ed6c02' : '#1976d2' }}>
-            {editMode ? 'Edit Transformer' : 'Add New Transformer'}
-          </Typography>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={3}>
-              <TextField
-                fullWidth
-                label="Transformer No"
-                value={form.transformerNo}
-                onChange={e => setForm({ ...form, transformerNo: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                fullWidth
-                label="Pole No"
-                value={form.poleNo}
-                onChange={e => setForm({ ...form, poleNo: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                select
-                fullWidth
-                label="Region"
-                value={form.region}
-                onChange={e => setForm({ ...form, region: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-                SelectProps={{ native: true }}
-              >
-                <option value="" />
-                {REGION_OPTIONS.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={2.5}>
-              <TextField
-                select
-                fullWidth
-                label="Type"
-                value={form.transformerType}
-                onChange={e => setForm({ ...form, transformerType: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-                SelectProps={{ native: true }}
-              >
-                <option value="" />
-                {TYPE_OPTIONS.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={2}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  variant="contained"
-                  onClick={create}
-                  startIcon={editMode ? <Edit /> : <Add />}
-                  size="small"
-                  sx={{ minWidth: 'auto' }}
-                  disabled={loading}
-                >
-                  {editMode ? 'Update' : 'Add'}
-                </Button>
-                {editMode && (
-                  <Button
-                    variant="outlined"
-                    onClick={cancelEdit}
-                    size="small"
-                    sx={{ minWidth: 'auto' }}
+    <Container maxWidth="xl" sx={{ py: 3 }}>
+      <Fade in timeout={600}>
+        <Box>
+          {/* Header Section with Gradient Background */}
+          <Card 
+            sx={{ 
+              mb: 4,
+              background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+              color: 'white',
+              position: 'relative',
+              overflow: 'hidden',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                width: '200px',
+                height: '200px',
+                background: 'rgba(255,255,255,0.1)',
+                borderRadius: '50%',
+                transform: 'translate(50%, -50%)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 4, position: 'relative', zIndex: 1 }}>
+              <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems="center" spacing={3}>
+                <Stack spacing={1} alignItems={{ xs: 'center', md: 'flex-start' }}>
+                  <Typography
+                    variant="h3"
+                    component="h1"
+                    sx={{ 
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      textAlign: { xs: 'center', md: 'left' }
+                    }}
                   >
-                    Cancel
+                    <ElectricalServices sx={{ fontSize: 48 }} />
+                    Transformer Management
+                  </Typography>
+                  <Typography variant="h6" sx={{ opacity: 0.9, textAlign: { xs: 'center', md: 'left' } }}>
+                    Monitor and manage electrical transformers with thermal inspection data
+                  </Typography>
+                </Stack>
+
+                <Stack direction="row" spacing={2}>
+                  <Button 
+                    variant="contained" 
+                    size="large"
+                    startIcon={<Refresh />} 
+                    onClick={() => load()}
+                    disabled={loading}
+                    sx={{ 
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                      backdropFilter: 'blur(10px)',
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                    }}
+                  >
+                    Refresh
                   </Button>
-                )}
-              </Box>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+                  <Button 
+                    variant="contained" 
+                    size="large"
+                    startIcon={<Add />} 
+                    onClick={openCreate}
+                    sx={{ 
+                      bgcolor: '#ff6b35',
+                      '&:hover': { bgcolor: '#e55a2b' }
+                    }}
+                  >
+                    Add Transformer
+                  </Button>
+                </Stack>
+              </Stack>
 
-      {/* Transformers Table */}
-      <Paper sx={{ boxShadow: 3 }}>
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h6" sx={{ color: '#1976d2' }}>
-            Registered Transformers ({transformers.length})
-          </Typography>
-        </Box>
+              {/* Statistics Cards */}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 3 }}>
+                {[
+                  { label: 'Total Transformers', value: stats.total, color: '#ffffff' },
+                  { label: 'Bulk Type', value: stats.bulk, color: '#4caf50' },
+                  { label: 'Distribution Type', value: stats.distribution, color: '#ff9800' },
+                  { label: 'Regions Covered', value: stats.regions, color: '#9c27b0' }
+                ].map((stat, index) => (
+                  <Grow key={stat.label} in timeout={800 + index * 200}>
+                    <Card sx={{ 
+                      flex: 1,
+                      bgcolor: 'rgba(255,255,255,0.15)',
+                      backdropFilter: 'blur(10px)',
+                      border: '1px solid rgba(255,255,255,0.2)'
+                    }}>
+                      <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                        <Typography variant="h4" sx={{ fontWeight: 700, color: stat.color }}>
+                          {stat.value}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                          {stat.label}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grow>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
 
-        {transformers.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <ElectricalServices sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No transformers registered yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Add your first transformer using the form above
-            </Typography>
-          </Box>
-        ) : (
-          <Table>
-            <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <ElectricalServices fontSize="small" />
-                    Transformer No
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <LocationOn fontSize="small" />
-                    Pole No
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <PowerInput fontSize="small" />
-                    Region
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <PowerInput fontSize="small" />
-                    Type
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, textAlign: 'center' }}>
-                  Actions
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {transformers.map((t) => (
-                <TableRow
-                  key={t.id}
-                  onClick={() => navigate(`/transformers/${t.id}/inspections`)}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: '#f9f9f9' },
-                    bgcolor: editingId === t.id ? '#fff3e0' : 'inherit'
+          {/* Filters and Search */}
+          <Grow in timeout={800}>
+            <Paper sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+                <TextField
+                  placeholder="Search transformers..."
+                  variant="outlined"
+                  size="medium"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  sx={{ flex: 1, minWidth: 300 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search color="action" />
+                      </InputAdornment>
+                    ),
                   }}
-                >
-                  <TableCell>
-                    <Chip label={t.transformerNo} color="primary" variant="outlined" size="small" />
-                  </TableCell>
-                  <TableCell>{t.poleNo  || "-"}</TableCell>
-                  <TableCell>{t.region || "-"}</TableCell>
-                  <TableCell>{t.transformerType || "-"}</TableCell>
-
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => openImages(t)}
-                        color="primary"
-                        sx={{ '&:hover': { bgcolor: '#e3f2fd' } }}
-                      >
-                        <ImageIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => startEdit(t)}
-                        color="primary"
-                        sx={{ '&:hover': { bgcolor: '#e3f2fd' } }}
-                      >
-                        <Edit fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => confirmDelete(t)}
-                        color="error"
-                        sx={{ '&:hover': { bgcolor: '#ffebee' } }}
-                      >
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Paper>
-
-      {/* Images Viewer Dialog */}
-      <Dialog
-        open={imagesOpen}
-        onClose={() => setImagesOpen(false)}
-        fullWidth
-        maxWidth="md"
-      >
-        <DialogTitle>
-          {viewT ? `Images: ${viewT.name} (${viewT.site || "-"})` : "Images"}
-        </DialogTitle>
-        <DialogContent dividers>
-          {imagesLoading && (
-            <Box sx={{ mb: 2 }}>
-              <LinearProgress />
-            </Box>
-          )}
-
-          {!imagesLoading && images.length === 0 && (
-            <Typography color="text.secondary">No images found.</Typography>
-          )}
-
-          <Grid container spacing={2}>
-            {images.map((img,i) => (
-              <Grid item xs={12} sm={6} md={4} key={img.id}>
-                <Card variant="outlined" sx={{ height: "100%" }}>
-                  <Box sx={{ p: 1 }}>
-                    <img
-                      src={imageRawUrl(img.id)}
-                      alt={img.filename || `image-${img.id}`}
-                      style={{ width: "100%", height: 180, objectFit: "cover", borderRadius: 6, cursor: "zoom-in" }}
-                      onClick={() => { setPreviewIndex(i); setPreviewOpen(true); }} // <-- i is the index in map
+                />
+                
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <FilterList color="action" />
+                  <Typography variant="body2" color="text.secondary">
+                    Filters:
+                  </Typography>
+                  
+                  {/* Region Filter */}
+                  <Stack direction="row" spacing={1}>
+                    <Chip 
+                      label="All Regions"
+                      variant={selectedRegion === "All" ? "filled" : "outlined"}
+                      onClick={() => setSelectedRegion("All")}
+                      color="primary"
+                      size="small"
                     />
-                  </Box>
-                  <CardContent sx={{ pt: 0 }}>
-                    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}>
-                      <Chip size="small" label={img.imageType} />
-                      {img.envCondition?.weather && (
-                        <Chip
-                          size="small"
-                          label={img.envCondition.weather}
-                          variant="outlined"
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="body2">
-                      {img.uploader || "-"}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {img.createdAt ? new Date(img.createdAt).toLocaleString() : ""}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImagesOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+                    {REGION_OPTIONS.map(region => (
+                      <Chip 
+                        key={region}
+                        label={region}
+                        variant={selectedRegion === region ? "filled" : "outlined"}
+                        onClick={() => setSelectedRegion(region)}
+                        color="primary"
+                        size="small"
+                      />
+                    ))}
+                  </Stack>
+                  
+                  <Divider orientation="vertical" flexItem />
+                  
+                  {/* Type Filter */}
+                  <Stack direction="row" spacing={1}>
+                    <Chip 
+                      label="All Types"
+                      variant={selectedType === "All" ? "filled" : "outlined"}
+                      onClick={() => setSelectedType("All")}
+                      color="secondary"
+                      size="small"
+                    />
+                    {TYPE_OPTIONS.map(type => (
+                      <Chip 
+                        key={type}
+                        label={type}
+                        variant={selectedType === type ? "filled" : "outlined"}
+                        onClick={() => setSelectedType(type)}
+                        color="secondary"
+                        size="small"
+                      />
+                    ))}
+                  </Stack>
+                  
+                  {(searchTerm || selectedRegion !== "All" || selectedType !== "All") && (
+                    <Button 
+                      variant="text" 
+                      size="small" 
+                      onClick={clearFilters}
+                      sx={{ ml: 1 }}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                </Stack>
+              </Stack>
+              
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Analytics color="action" />
+                <Typography variant="body2" color="text.secondary">
+                  Showing {filteredTransformers.length} of {transformers.length} transformers
+                </Typography>
+              </Box>
+            </Paper>
+          </Grow>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, transformer: null })}>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete transformer "{deleteDialog.transformer?.name}"?
-            This will remove all associated thermal images.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialog({ open: false, transformer: null })}>
-            Cancel
-          </Button>
-          <Button onClick={remove} color="error" variant="contained">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+          {/* Table / Empty State */}
+          <Grow in timeout={1000}>
+            <Paper sx={{ 
+              borderRadius: 3,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+              minHeight: filteredTransformers.length === 0 ? "60vh" : "auto" 
+            }}>
+              <Box sx={{ 
+                p: 3, 
+                borderBottom: 1, 
+                borderColor: "divider",
+                background: 'linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%)'
+              }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="h5" sx={{ 
+                    color: "#1976d2", 
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                  }}>
+                    <GridView />
+                    Transformer Registry
+                  </Typography>
+                  <Chip 
+                    label={`${filteredTransformers.length} Records`}
+                    color="primary"
+                    variant="filled"
+                  />
+                </Stack>
+              </Box>
 
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          variant="filled"
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-      <ImagePreviewDialog
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        images={images}
-        index={previewIndex}
-        setIndex={setPreviewIndex}
-        apiBase={(axiosClient.defaults.baseURL || "/api").replace(/\/$/, "") + apiBase}
-        transformer={viewT}
-      />
+              {loading && (
+                <Box sx={{ p: 2 }}>
+                  <LinearProgress sx={{ height: 6, borderRadius: 3 }} />
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+                    Loading transformers...
+                  </Typography>
+                </Box>
+              )}
 
-    </Box>
+              {!loading && filteredTransformers.length === 0 ? (
+                <EmptyState
+                  title={searchTerm || selectedRegion !== "All" || selectedType !== "All" 
+                    ? "No transformers match your filters" 
+                    : "No transformers registered yet"}
+                  subtitle={searchTerm || selectedRegion !== "All" || selectedType !== "All"
+                    ? "Try adjusting your search criteria or filters"
+                    : 'Click the "Add Transformer" button to create your first record.'}
+                  actionText={searchTerm || selectedRegion !== "All" || selectedType !== "All" 
+                    ? "Clear Filters" 
+                    : "Add Transformer"}
+                  onAction={searchTerm || selectedRegion !== "All" || selectedType !== "All" 
+                    ? clearFilters 
+                    : openCreate}
+                />
+              ) : !loading && (
+                <Box sx={{ width: "100%", overflowX: "auto" }}>
+                  <TransformerTable
+                    items={filteredTransformers}
+                    editingId={editingId}
+                    onRowClick={(t) => navigate(`/transformers/${t.id}/inspections`)}
+                    onOpenImages={openImages}
+                    onEdit={openEdit}
+                    onDelete={handleDeleteClick}
+                  />
+                </Box>
+              )}
+            </Paper>
+          </Grow>
+
+          {/* Create/Edit Dialog */}
+          <TransformerFormDialog
+            open={formDialogOpen}
+            mode={mode}
+            initialValues={initialForm}
+            regions={REGION_OPTIONS}
+            types={TYPE_OPTIONS}
+            loading={false}
+            onClose={() => setFormDialogOpen(false)}
+            onSubmit={submitForm}
+          />
+
+          {/* Delete Confirmation Dialog */}
+          <Dialog
+            open={deleteDialog.open}
+            onClose={() => setDeleteDialog({ open: false, transformer: null })}
+            PaperProps={{
+              sx: { borderRadius: 3 }
+            }}
+          >
+            <DialogTitle sx={{ color: '#d32f2f', fontWeight: 600 }}>
+              Confirm Deletion
+            </DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                Are you sure you want to delete transformer{' '}
+                <strong>{deleteDialog.transformer?.transformerNo}</strong>?
+                This action cannot be undone.
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions sx={{ p: 3, gap: 1 }}>
+              <Button 
+                onClick={() => setDeleteDialog({ open: false, transformer: null })}
+                variant="outlined"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={confirmDelete}
+                color="error"
+                variant="contained"
+              >
+                Delete
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Images Viewer Dialog */}
+          <ImagePreviewDialog
+            open={imagesOpen}
+            onClose={() => setImagesOpen(false)}
+            images={images}
+            index={previewIndex}
+            setIndex={setPreviewIndex}
+            transformer={viewT}
+            getImageUrl={(imgId) => buildImageRawUrl(imgId)}
+            loading={imagesLoading}
+          />
+
+          {/* Snackbar */}
+          <Snackbar
+            open={snackbar.open}
+            autoHideDuration={5000}
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          >
+            <Alert
+              onClose={() => setSnackbar({ ...snackbar, open: false })}
+              severity={snackbar.severity}
+              variant="filled"
+              sx={{ borderRadius: 2 }}
+            >
+              {snackbar.message}
+            </Alert>
+          </Snackbar>
+        </Box>
+      </Fade>
+    </Container>
   );
 }
