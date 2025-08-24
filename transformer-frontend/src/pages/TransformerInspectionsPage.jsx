@@ -14,7 +14,7 @@ import {
   Assessment, Person, CalendarToday, Notes, CheckCircle, Schedule,
   Close as CloseIcon, Engineering, TrendingUp, Warning, Search,
   Analytics, CloudUpload, Image as ImageIcon, WbSunny, Cloud, Umbrella,
-  Info, ArrowBackIosNew, ArrowForwardIos
+  Info, ArrowBackIosNew, ArrowForwardIos, Delete, PhotoCamera
 } from "@mui/icons-material";
 
 export default function TransformerInspectionsPage() {
@@ -46,6 +46,11 @@ export default function TransformerInspectionsPage() {
   const [formErrors, setFormErrors] = useState({});
   const [touched, setTouched] = useState({});
 
+  // delete confirmation dialog
+  const [deleteDialog, setDeleteDialog] = useState(false);
+  const [inspectionToDelete, setInspectionToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
   // per-inspection upload dialog (MAINTENANCE)
   const [openUpload, setOpenUpload] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState(null);
@@ -55,7 +60,7 @@ export default function TransformerInspectionsPage() {
   const [dragOver, setDragOver] = useState(false);
   const [weather, setWeather] = useState("SUNNY"); // SUNNY|CLOUDY|RAINY
 
-  // BASELINE upload dialog (transformer-level, only when no images exist)
+  // BASELINE upload dialog (transformer-level, always available)
   const [openBaseline, setOpenBaseline] = useState(false);
   const [baseline, setBaseline] = useState({
     uploader: "",
@@ -161,6 +166,29 @@ export default function TransformerInspectionsPage() {
       toast(e?.response?.data?.error || "Failed to add inspection", "error");
       return false;
     } finally { setFormLoading(false); }
+  };
+
+  // Delete inspection functionality
+  const confirmDelete = (inspection) => {
+    setInspectionToDelete(inspection);
+    setDeleteDialog(true);
+  };
+
+  const deleteInspection = async () => {
+    if (!inspectionToDelete) return;
+    
+    try {
+      setDeleting(true);
+      await axiosClient.delete(`${apiBase}/${id}/inspections/${inspectionToDelete.id}`);
+      toast("Inspection deleted successfully");
+      setDeleteDialog(false);
+      setInspectionToDelete(null);
+      await load();
+    } catch (e) {
+      toast(e?.response?.data?.error || "Failed to delete inspection", "error");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // filters & stats
@@ -362,9 +390,14 @@ export default function TransformerInspectionsPage() {
                 </Typography>
               </Box>
 
-              <Button variant="contained" startIcon={<Add />} onClick={() => setOpenDialog(true)}>
-                Create New Inspection
-              </Button>
+              <Stack direction="row" spacing={2}>
+                <Button variant="outlined" startIcon={<PhotoCamera />} onClick={() => setOpenBaseline(true)}>
+                  Upload Baseline
+                </Button>
+                <Button variant="contained" startIcon={<Add />} onClick={() => setOpenDialog(true)}>
+                  Create New Inspection
+                </Button>
+              </Stack>
             </Stack>
           </Box>
 
@@ -530,7 +563,7 @@ export default function TransformerInspectionsPage() {
                             <Stack direction="row" alignItems="center" spacing={1}><CalendarToday fontSize="small" />Created</Stack>
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600, textAlign: "right" }}>
-                            Compare
+                            Actions
                           </TableCell>
                         </TableRow>
                       </TableHead>
@@ -589,6 +622,16 @@ export default function TransformerInspectionsPage() {
                                   >
                                     Upload Image
                                   </Button>
+                                  <Tooltip title="Delete Inspection">
+                                    <IconButton
+                                      size="small"
+                                      color="error"
+                                      onClick={() => confirmDelete(inspection)}
+                                      sx={{ "&:hover": { bgcolor: alpha(theme.palette.error.main, 0.1) } }}
+                                    >
+                                      <Delete fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
                                 </Stack>
                               </TableCell>
                             </TableRow>
@@ -640,6 +683,30 @@ export default function TransformerInspectionsPage() {
                 const ok = await addInspection(); if (ok) setOpenDialog(false);
               }} disabled={formLoading}>
                 {formLoading ? "Adding..." : "Add Inspection"}
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Delete Confirmation Dialog */}
+          <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)} maxWidth="sm">
+            <DialogTitle>
+              Confirm Delete
+            </DialogTitle>
+            <DialogContent>
+              <Typography>
+                Are you sure you want to delete the inspection "{inspectionToDelete?.title}"? This action cannot be undone.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
+              <Button 
+                variant="contained" 
+                color="error" 
+                startIcon={<Delete />}
+                onClick={deleteInspection}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting..." : "Delete"}
               </Button>
             </DialogActions>
           </Dialog>
